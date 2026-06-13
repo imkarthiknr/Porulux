@@ -36,10 +36,7 @@ export default function LoginPage() {
     setError(null)
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/callback`,
-      },
+      options: { shouldCreateUser: true },
     })
     if (error) {
       setError(error.message)
@@ -77,7 +74,7 @@ export default function LoginPage() {
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
           <h1 className="text-xl font-semibold text-slate-900 mb-6">
-            {step === 'email' ? 'Sign in' : 'Enter your code'}
+            {step === 'email' ? 'Sign in' : 'Check your email'}
           </h1>
 
           {step === 'email' ? (
@@ -128,30 +125,45 @@ export default function LoginPage() {
               </form>
             </>
           ) : (
-            <div className="space-y-4">
-              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center space-y-1">
-                <p className="text-sm font-medium text-indigo-700">Check your inbox</p>
-                <p className="text-xs text-indigo-500">
-                  We sent a sign-in link to{' '}
-                  <span className="font-semibold">{email}</span>
-                </p>
-                <p className="text-xs text-slate-400 pt-1">Click the link in the email to continue.</p>
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <p className="text-sm text-slate-500">
+                We sent a 6-digit code to <span className="font-medium text-slate-700">{email}</span>
+              </p>
+              <div>
+                <label htmlFor="otp" className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Verification code
+                </label>
+                <input
+                  id="otp"
+                  type="text"
+                  inputMode="numeric"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="123456"
+                  required
+                  autoFocus
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent tracking-widest text-center"
+                />
               </div>
 
               {error && <p className="text-sm text-red-600">{error}</p>}
 
               <button
+                type="submit"
+                disabled={loading || otp.length !== 6}
+                className="w-full py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Verifying…' : 'Verify code'}
+              </button>
+
+              <button
                 type="button"
-                onClick={() => {
-                  setStep('email')
-                  setOtp('')
-                  setError(null)
-                }}
+                onClick={() => { setStep('email'); setOtp(''); setError(null) }}
                 className="w-full py-2 text-sm text-slate-500 hover:text-slate-700 transition-colors"
               >
                 ← Use a different email
               </button>
-            </div>
+            </form>
           )}
         </div>
       </div>
