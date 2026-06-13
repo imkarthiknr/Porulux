@@ -9,22 +9,21 @@ export default function CallbackPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const code = params.get('code')
     const next = params.get('next') ?? '/dashboard'
 
-    async function exchange() {
+    async function handleCallback() {
       const supabase = createClient()
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code)
-        if (!error) {
-          router.replace(next)
-          return
-        }
+      // Implicit flow: supabase-js detects the session from the URL hash automatically.
+      // Give it a moment to process the hash before calling getSession.
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        router.replace(next)
+      } else {
+        router.replace('/login?error=no_session')
       }
-      router.replace('/login?error=callback_error')
     }
 
-    exchange()
+    handleCallback()
   }, [router])
 
   return (
