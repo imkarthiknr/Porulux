@@ -36,7 +36,10 @@ export default function LoginPage() {
     setError(null)
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true },
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: `${window.location.origin}/callback`,
+      },
     })
     if (error) {
       setError(error.message)
@@ -125,43 +128,17 @@ export default function LoginPage() {
               </form>
             </>
           ) : (
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <p className="text-sm text-slate-500">
-                We sent a 6-digit code to{' '}
-                <span className="font-medium text-slate-700">{email}</span>
-              </p>
-
-              <div>
-                <label
-                  htmlFor="otp"
-                  className="block text-sm font-medium text-slate-700 mb-1.5"
-                >
-                  Verification code
-                </label>
-                <input
-                  id="otp"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                  placeholder="123456"
-                  required
-                  autoFocus
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm text-center tracking-[0.5em] placeholder:tracking-normal placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
+            <div className="space-y-4">
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center space-y-1">
+                <p className="text-sm font-medium text-indigo-700">Check your inbox</p>
+                <p className="text-xs text-indigo-500">
+                  We sent a sign-in link to{' '}
+                  <span className="font-semibold">{email}</span>
+                </p>
+                <p className="text-xs text-slate-400 pt-1">Click the link in the email to continue.</p>
               </div>
 
               {error && <p className="text-sm text-red-600">{error}</p>}
-
-              <button
-                type="submit"
-                disabled={loading || otp.length !== 6}
-                className="w-full py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Verifying…' : 'Verify'}
-              </button>
 
               <button
                 type="button"
@@ -174,7 +151,7 @@ export default function LoginPage() {
               >
                 ← Use a different email
               </button>
-            </form>
+            </div>
           )}
         </div>
       </div>
