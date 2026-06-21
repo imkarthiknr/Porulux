@@ -1,13 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { signIn, signUp } from '@/app/actions'
 
 type Mode = 'signin' | 'signup' | 'forgot'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [supabase] = useState(() => createClient())
 
   const [mode, setMode] = useState<Mode>('signin')
@@ -50,15 +49,13 @@ export default function LoginPage() {
     }
 
     if (mode === 'signup') {
-      const { error } = await supabase.auth.signUp({ email, password })
-      if (error) { setError(error.message); setLoading(false); return }
-      window.location.href = '/dashboard'
+      const result = await signUp(email, password)
+      if (result?.error) { setError(result.error); setLoading(false) }
       return
     }
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) { setError(error.message); setLoading(false); return }
-    window.location.href = '/dashboard'
+    const result = await signIn(email, password)
+    if (result?.error) { setError(result.error); setLoading(false) }
   }
 
   const title = mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Reset password'
