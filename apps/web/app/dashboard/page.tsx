@@ -31,14 +31,18 @@ interface HistoryEntry {
 
 // ── Data fetching ──────────────────────────────────────────────────────────────
 
-async function fetchJSON<T>(path: string, token: string): Promise<T> {
-  const base = process.env.API_URL ?? 'http://localhost:8000'
-  const res = await fetch(`${base}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: 'no-store',
-  })
-  if (!res.ok) throw new Error(`${path} returned ${res.status}`)
-  return res.json() as Promise<T>
+async function fetchJSON<T>(path: string, token: string): Promise<T | null> {
+  try {
+    const base = process.env.API_URL ?? 'http://localhost:8000'
+    const res = await fetch(`${base}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    })
+    if (!res.ok) return null
+    return res.json() as Promise<T>
+  } catch {
+    return null
+  }
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -76,10 +80,17 @@ export default async function DashboardPage() {
     fetchJSON<HistoryEntry[]>('/api/v1/networth/history', session.access_token),
   ])
 
-  // Monthly change: current net worth vs. the second-most-recent saved snapshot.
-  // History is sorted DESC, so history[1] is the previous snapshot.
-  const prevNetWorth = history[1]?.net_worth ?? history[0]?.net_worth ?? snapshot.net_worth
-  const monthlyChange = snapshot.net_worth - prevNetWorth
+  const emptyBreakdown: Breakdown = { investments: 0, epf_nps: 0, bank_balance: 0, loans: 0 }
+  const safeSnapshot: Snapshot = snapshot ?? {
+    total_assets: 0,
+    total_liabilities: 0,
+    net_worth: 0,
+    breakdown: emptyBreakdown,
+  }
+  const safeHistory: HistoryEntry[] = history ?? []
+
+  const prevNetWorth = safeHistory[1]?.net_worth ?? safeHistory[0]?.net_worth ?? safeSnapshot.net_worth
+  const monthlyChange = safeSnapshot.net_worth - prevNetWorth
   const monthlyChangePct =
     prevNetWorth !== 0 ? (monthlyChange / Math.abs(prevNetWorth)) * 100 : 0
 
@@ -110,41 +121,31 @@ export default async function DashboardPage() {
 
         {/* ── Summary cards ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <SummaryCard
-            label="Total Assets"
-            value={snapshot.total_assets}
-            variant="asset"
-          />
-          <SummaryCard
-            label="Total Liabilities"
-            value={snapshot.total_liabilities}
-            variant="liability"
-          />
-          <SummaryCard
-            label="Net Worth"
-            value={snapshot.net_worth}
-            variant="networth"
-          />
-          <SummaryCard
-            label="Monthly Change"
-            value={monthlyChange}
-            variant="change"
-            changePct={monthlyChangePct}
-          />
+          <SummaryCard label="Total Assets" value={safeSnapshot.total_assets} variant="asset" />
+          <SummaryCard label="Total Liabilities" value={safeSnapshot.total_liabilities} variant="liability" />
+          <SummaryCard label="Net Worth" value={safeSnapshot.net_worth} variant="networth" />
+          <SummaryCard label="Monthly Change" value={monthlyChange} variant="change" changePct={monthlyChangePct} />
         </div>
 
-        {/* ── Charts ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6">
-            <h2 className="text-sm font-semibold text-slate-900 mb-5">Net Worth Trend</h2>
-            <NetWorthChart history={history} />
+        {safeHistory.length === 0 && safeSnapshot.net_worth === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+            <p className="text-slate-500 text-sm">No data yet.</p>
+            <p className="text-slate-400 text-xs mt-1">
+              Upload a payslip or add your net worth to get started.
+            </p>
           </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <h2 className="text-sm font-semibold text-slate-900 mb-5">Asset Breakdown</h2>
-            <AssetBreakdownChart breakdown={snapshot.breakdown} />
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6">
+              <h2 className="text-sm font-semibold text-slate-900 mb-5">Net Worth Trend</h2>
+              <NetWorthChart history={safeHistory} />
+            </div>
+            <div className="bg-white rounded-2xl border border-slate-200 p-6">
+              <h2 className="text-sm font-semibold text-slate-900 mb-5">Asset Breakdown</h2>
+              <AssetBreakdownChart breakdown={safeSnapshot.breakdown} />
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   )
