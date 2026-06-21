@@ -52,13 +52,13 @@ export default function LoginPage() {
     if (mode === 'signup') {
       const { error } = await supabase.auth.signUp({ email, password })
       if (error) { setError(error.message); setLoading(false); return }
-      router.push('/dashboard')
+      window.location.href = '/dashboard'
       return
     }
 
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { setError(error.message); setLoading(false); return }
-    router.push('/dashboard')
+    window.location.href = '/dashboard'
   }
 
   const title = mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Reset password'
