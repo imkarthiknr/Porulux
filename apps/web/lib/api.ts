@@ -22,6 +22,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await res.json().catch(() => ({})) as { detail?: string }
     throw new Error(body.detail ?? `Request failed (${res.status})`)
   }
+  if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
 }
 
@@ -147,4 +148,96 @@ export async function savePayslip(data: Record<string, unknown>): Promise<SavedS
       net_pay: data.net_salary ?? null,
     }),
   })
+}
+
+// ── Manual-entry resources (holdings, loans, EPF/NPS) ──────────────────────────
+
+export interface Holding {
+  id: string
+  symbol: string
+  name: string
+  holding_type: 'STOCK' | 'MF' | 'ETF' | 'BOND' | 'SGB' | 'OTHER'
+  units: number
+  current_price?: number | null
+  avg_buy_price?: number | null
+}
+
+export interface Loan {
+  id: string
+  loan_type: 'HOME_LOAN' | 'PERSONAL_LOAN' | 'VEHICLE_LOAN' | 'CREDIT_CARD' | 'OTHER'
+  lender_name?: string | null
+  outstanding_amount: number
+  emi_amount?: number | null
+  interest_rate?: number | null
+}
+
+export interface EpfNps {
+  id: string
+  account_type: 'EPF' | 'NPS_TIER1' | 'NPS_TIER2'
+  balance: number
+  as_of_date: string
+}
+
+export type Resource = 'holdings' | 'loans' | 'epf-nps'
+
+export const listItems = <T>(r: Resource) => apiFetch<T[]>(`/api/v1/${r}/`)
+export const createItem = <T>(r: Resource, body: Record<string, unknown>) =>
+  apiFetch<T>(`/api/v1/${r}/`, { method: 'POST', body: JSON.stringify(body) })
+export const deleteItem = (r: Resource, id: string) =>
+  apiFetch<void>(`/api/v1/${r}/${id}`, { method: 'DELETE' })
+
+// ── Bank transactions ──────────────────────────────────────────────────────────
+
+export interface Transaction {
+  id: string
+  transaction_date: string
+  description: string
+  amount: number
+  category?: string | null
+  bank_name?: string | null
+}
+
+export interface MonthlySummary {
+  month: string
+  income: number
+  expenses: number
+  net: number
+  by_category: { category: string; total: number }[]
+}
+
+export interface ImportResult {
+  parsed: number
+  inserted: number
+  duplicates_skipped: number
+}
+
+export const listTransactions = (month: string, category?: string) =>
+  apiFetch<Transaction[]>(
+    `/api/v1/transactions/?month=${month}${category ? `&category=${encodeURIComponent(category)}` : ''}`,
+  )
+export const getMonthlySummary = (month: string) =>
+  apiFetch<MonthlySummary>(`/api/v1/transactions/summary?month=${month}`)
+export const listCategories = () => apiFetch<string[]>('/api/v1/transactions/categories')
+export const createTransaction = (body: Record<string, unknown>) =>
+  apiFetch<Transaction>('/api/v1/transactions/', { method: 'POST', body: JSON.stringify(body) })
+export const updateTransactionCategory = (id: string, category: string) =>
+  apiFetch<Transaction>(`/api/v1/transactions/${id}`, { method: 'PATCH', body: JSON.stringify({ category }) })
+export const deleteTransaction = (id: string) =>
+  apiFetch<void>(`/api/v1/transactions/${id}`, { method: 'DELETE' })
+
+export async function importStatement(file: File, bankName?: string): Promise<ImportResult> {
+  const token = await getToken()
+  const form = new FormData()
+  form.append('file', file)
+  if (bankName) form.append('bank_name', bankName)
+  const res = await fetch(`${API_BASE}/api/v1/transactions/import`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { detail?: string }
+    throw new Error(body.detail ?? `Import failed (${res.status})`)
+  }
+  return res.json() as Promise<ImportResult>
 }

@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import DashboardNav from '@/components/dashboard/DashboardNav'
 import SummaryCard from '@/components/dashboard/SummaryCard'
 import NetWorthChart from '@/components/dashboard/NetWorthChart'
 import AssetBreakdownChart from '@/components/dashboard/AssetBreakdownChart'
@@ -96,21 +96,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* ── Header ── */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <span className="text-lg font-bold text-indigo-600 tracking-tight">₹ Porulux</span>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard/upload"
-              className="text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors"
-            >
-              + Upload
-            </Link>
-            <span className="text-sm text-slate-500">{session.user.email}</span>
-          </div>
-        </div>
-      </header>
+      <DashboardNav active="/dashboard" email={session.user.email} />
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
         {/* ── Page title ── */}
@@ -131,7 +117,7 @@ export default async function DashboardPage() {
           <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
             <p className="text-slate-500 text-sm">No data yet.</p>
             <p className="text-slate-400 text-xs mt-1">
-              Upload a payslip or add your net worth to get started.
+              Add your holdings, loans and EPF/NPS under Accounts, or import a bank statement under Transactions.
             </p>
           </div>
         ) : (

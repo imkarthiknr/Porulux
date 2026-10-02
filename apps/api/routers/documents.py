@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from core.auth import get_current_user
 from schemas.documents import UploadResponse
+from services.ai import MODEL
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
@@ -117,7 +118,7 @@ async def upload_document(
     # Step 1: Auto-detect document type when not specified
     if resolved == "auto":
         detect = await _client.messages.create(
-            model="claude-opus-4-8",
+            model=MODEL,
             max_tokens=50,
             messages=[{
                 "role": "user",
@@ -131,7 +132,7 @@ async def upload_document(
     # Step 2: Extract structured data with streaming (documents can be large)
     prompt = EXTRACTION_PROMPTS[resolved]
     async with _client.messages.stream(
-        model="claude-opus-4-8",
+        model=MODEL,
         max_tokens=4096,
         thinking={"type": "adaptive"},
         messages=[{
