@@ -2,7 +2,6 @@
 
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
 
 function serverSupabase() {
   const cookieStore = cookies()
@@ -26,7 +25,9 @@ export async function signIn(email: string, password: string) {
   const supabase = serverSupabase()
   const { error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) return { error: error.message }
-  redirect('/dashboard')
+  // No redirect() here: Next follows server-action redirects with the *pre-login* cookies,
+  // so the middleware sees no session. The client does a full page load instead.
+  return { ok: true as const }
 }
 
 export async function signUp(email: string, password: string, origin: string) {
@@ -46,5 +47,5 @@ export async function signUp(email: string, password: string, origin: string) {
   if (!data.session) {
     return { notice: 'Account created. Check your inbox and click the confirmation link to continue.' }
   }
-  redirect('/dashboard')
+  return { ok: true as const }
 }

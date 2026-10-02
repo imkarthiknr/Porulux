@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { signIn, signUp } from '@/app/actions'
+import { safeNext } from '@/lib/redirect'
 
 type Mode = 'signin' | 'signup' | 'forgot'
 
@@ -24,6 +25,12 @@ export default function LoginPage() {
       window.history.replaceState(null, '', window.location.pathname)
     }
   }, [])
+
+  // Full page load so the browser sends the freshly set session cookies to the middleware.
+  function goToApp() {
+    const next = safeNext(new URLSearchParams(window.location.search).get('next'))
+    window.location.assign(next)
+  }
 
   function switchMode(to: Mode) {
     setMode(to)
@@ -61,12 +68,14 @@ export default function LoginPage() {
       const result = await signUp(email, password, window.location.origin)
       if (result?.error) setError(result.error)
       else if (result?.notice) setSuccess(result.notice)
+      else if (result?.ok) { goToApp(); return }
       setLoading(false)
       return
     }
 
     const result = await signIn(email, password)
     if (result?.error) { setError(result.error); setLoading(false) }
+    else goToApp()
   }
 
   const title = mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Reset password'
