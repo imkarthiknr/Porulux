@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { signIn, signUp } from '@/app/actions'
 
@@ -15,6 +15,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+
+  // Errors bounced back from /callback (denied Google consent, expired reset link, ...)
+  useEffect(() => {
+    const err = new URLSearchParams(window.location.search).get('error')
+    if (err) {
+      setError(err)
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
 
   function switchMode(to: Mode) {
     setMode(to)
@@ -40,7 +49,7 @@ export default function LoginPage() {
 
     if (mode === 'forgot') {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/callback`,
+        redirectTo: `${window.location.origin}/callback?next=/reset-password`,
       })
       if (error) setError(error.message)
       else setSuccess('Check your inbox for a password reset link.')
@@ -49,8 +58,10 @@ export default function LoginPage() {
     }
 
     if (mode === 'signup') {
-      const result = await signUp(email, password)
-      if (result?.error) { setError(result.error); setLoading(false) }
+      const result = await signUp(email, password, window.location.origin)
+      if (result?.error) setError(result.error)
+      else if (result?.notice) setSuccess(result.notice)
+      setLoading(false)
       return
     }
 

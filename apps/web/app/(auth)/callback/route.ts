@@ -2,10 +2,19 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
+import { publicOrigin, safeNext } from '@/lib/redirect'
+
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url)
+  const { searchParams } = new URL(request.url)
+  const origin = publicOrigin(request)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/dashboard'
+  const next = safeNext(searchParams.get('next'))
+
+  // Supabase reports provider/link problems (denied consent, expired link) as query params.
+  const providerError = searchParams.get('error_description') ?? searchParams.get('error')
+  if (providerError) {
+    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(providerError)}`)
+  }
 
   if (code) {
     const cookieStore = cookies()
@@ -36,7 +45,12 @@ export async function GET(request: Request) {
     if (!error) {
       return response
     }
+    // PKCE links must be opened in the same browser that requested them.
+    const msg = /code verifier|code challenge/i.test(error.message)
+      ? 'Open the link in the same browser you used to request it, or request a new one.'
+      : error.message
+    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(msg)}`)
   }
 
-  return NextResponse.redirect(`${origin}/login`)
+  return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent('Sign-in link is invalid or has expired.')}`)
 }
