@@ -44,7 +44,8 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Run on every path except Next.js internals and static files.
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Skip /api/* (proxied to FastAPI, which validates the bearer token itself; also avoids
+    // middleware body buffering on file uploads) plus Next.js internals and static files.
+    '/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

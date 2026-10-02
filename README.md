@@ -52,3 +52,10 @@ Apply `supabase/migrations/*.sql` in order to your Supabase project.
 - Bank balance in net worth is the sum of imported transactions, so it ignores any opening balance.
 - Only payslips can be saved from the upload page; Form 16, CAS and statement summaries are extract-only.
 - Uploaded files are not yet persisted (`documents` table is unused).
+
+## Deploying (Firebase + Cloud Run, free tier)
+
+- **API** → Cloud Run (`asia-south1`, min instances 0): `gcloud run deploy porulux-api --source apps/api --region asia-south1 --allow-unauthenticated --min-instances 0 --max-instances 2 --memory 512Mi`. Keep `SUPABASE_SERVICE_ROLE_KEY` and `ANTHROPIC_API_KEY` in Secret Manager.
+- **Web** → Firebase App Hosting, root directory `apps/web`, live branch `main`; config in `apps/web/apphosting.yaml`.
+- The web app proxies `/api/*` to the Cloud Run service (`API_URL`), so the browser only ever talks to one origin and no CORS is needed. Firebase Hosting rewrites are not used because Hosting strips Supabase's `sb-*` auth cookies.
+- In Supabase → Authentication → URL Configuration, add the App Hosting URL and `/callback` as redirect URLs.

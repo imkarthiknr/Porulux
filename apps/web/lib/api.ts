@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+// Empty in production: calls go to /api/* on the same origin and Next proxies them.
+// Set NEXT_PUBLIC_API_URL=http://localhost:8000 in .env.local to hit the API directly in dev.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? ''
 
 async function getToken(): Promise<string> {
   const { data: { session } } = await createClient().auth.getSession()

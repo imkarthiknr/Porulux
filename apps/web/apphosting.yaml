@@ -1,0 +1,20 @@
+# Firebase App Hosting config for the Next.js app (root directory: apps/web)
+runConfig:
+  minInstances: 0   # scale to zero to stay inside the free tier
+  maxInstances: 2
+  cpu: 1
+  memoryMiB: 512
+  concurrency: 80
+
+env:
+  - variable: NEXT_PUBLIC_SUPABASE_URL
+    value: https://YOUR-PROJECT-REF.supabase.co
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_SUPABASE_ANON_KEY
+    value: YOUR-SUPABASE-ANON-KEY   # anon key is public by design
+    availability: [BUILD, RUNTIME]
+  # Cloud Run URL of the FastAPI service; used by the /api/* rewrite and server-side fetches.
+  # NEXT_PUBLIC_API_URL is intentionally unset so the browser stays same-origin.
+  - variable: API_URL
+    value: https://porulux-api-XXXXXXXX-el.a.run.app
+    availability: [BUILD, RUNTIME]
