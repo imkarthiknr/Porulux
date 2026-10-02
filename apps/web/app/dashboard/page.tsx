@@ -1,4 +1,4 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import DashboardNav from '@/components/dashboard/DashboardNav'
@@ -31,10 +31,11 @@ interface HistoryEntry {
 
 // ── Data fetching ──────────────────────────────────────────────────────────────
 
-async function fetchJSON<T>(path: string, token: string): Promise<T | null> {
+async function fetchJSON<T>(path: string, token: string, method = 'GET'): Promise<T | null> {
   try {
     const base = process.env.API_URL ?? 'http://localhost:8000'
     const res = await fetch(`${base}${path}`, {
+      method,
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
     })
@@ -58,7 +59,7 @@ export default async function DashboardPage() {
         getAll() {
           return cookieStore.getAll()
         },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options),
@@ -69,16 +70,20 @@ export default async function DashboardPage() {
     },
   )
 
+  // getUser() validates the JWT with Supabase; getSession() is then only used for the token.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
   const {
     data: { session },
   } = await supabase.auth.getSession()
-
   if (!session) redirect('/login')
 
-  const [snapshot, history] = await Promise.all([
-    fetchJSON<Snapshot>('/api/v1/networth/snapshot', session.access_token),
-    fetchJSON<HistoryEntry[]>('/api/v1/networth/history', session.access_token),
-  ])
+  // POST saves today's snapshot (upsert per day) and returns it, which keeps the trend chart populated.
+  const snapshot = await fetchJSON<Snapshot>('/api/v1/networth/snapshot', session.access_token, 'POST')
+  const history = await fetchJSON<HistoryEntry[]>('/api/v1/networth/history', session.access_token)
 
   const emptyBreakdown: Breakdown = { investments: 0, epf_nps: 0, bank_balance: 0, loans: 0 }
   const safeSnapshot: Snapshot = snapshot ?? {
@@ -96,7 +101,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <DashboardNav active="/dashboard" email={session.user.email} />
+      <DashboardNav active="/dashboard" email={user.email} />
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
         {/* ── Page title ── */}

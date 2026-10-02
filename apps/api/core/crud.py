@@ -1,4 +1,5 @@
-from __future__ import annotations
+# NOTE: no `from __future__ import annotations` here. The handlers below are annotated with
+# schema classes held in closure variables; FastAPI can only resolve those if annotations are real objects.
 
 from typing import Type
 
@@ -24,7 +25,7 @@ def make_crud_router(
     query is scoped by user_id here."""
     router = APIRouter(prefix=prefix, tags=[tag])
 
-    @router.get("/", response_model=list[read_schema])  # type: ignore[valid-type]
+    @router.get("", response_model=list[read_schema])  # type: ignore[valid-type]
     async def list_items(user_id: str = Depends(get_current_user)):
         res = (
             get_supabase_client()
@@ -36,7 +37,7 @@ def make_crud_router(
         )
         return res.data
 
-    @router.post("/", response_model=read_schema, status_code=status.HTTP_201_CREATED)  # type: ignore[valid-type]
+    @router.post("", response_model=read_schema, status_code=status.HTTP_201_CREATED)  # type: ignore[valid-type]
     async def create_item(payload: create_schema, user_id: str = Depends(get_current_user)):  # type: ignore[valid-type]
         data = payload.model_dump(exclude_none=True, mode="json")
         data["user_id"] = user_id

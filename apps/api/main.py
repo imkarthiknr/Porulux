@@ -9,7 +9,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from routers import documents, networth, salary, transactions
 from routers.portfolio import epf_nps_router, holdings_router, loans_router
 
-app = FastAPI(title="Porulux API", version="0.1.0")
+app = FastAPI(title="Porulux API", version="0.1.0", redirect_slashes=False)
+
+
+class StripTrailingSlash:
+    """Treat /x/ and /x as the same route. Proxies (Next rewrites) may drop the slash, and a
+    redirect from here would point the browser at this service's internal host."""
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and len(scope["path"]) > 1 and scope["path"].endswith("/"):
+            scope = {**scope, "path": scope["path"].rstrip("/"), "raw_path": scope.get("raw_path", b"").rstrip(b"/")}
+        await self.inner(scope, receive, send)
+
+
+app.add_middleware(StripTrailingSlash)
 
 _origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
 _allowed_origins = [o.strip() for o in _origins_env.split(",") if o.strip()]

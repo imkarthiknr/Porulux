@@ -1,4 +1,4 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
@@ -29,13 +29,17 @@ export async function GET(request: Request) {
           getAll() {
             return cookieStore.getAll()
           },
-          setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+          setAll(
+            cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[],
+            headers: Record<string, string>,
+          ) {
             // Write to both the Next.js cookie store and the redirect response
             // so the middleware sees the session on the very next request.
             cookiesToSet.forEach(({ name, value, options }) => {
               cookieStore.set(name, value, options)
               response.cookies.set(name, value, options)
             })
+            Object.entries(headers ?? {}).forEach(([k, v]) => response.headers.set(k, v))
           },
         },
       },

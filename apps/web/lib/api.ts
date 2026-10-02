@@ -10,6 +10,19 @@ async function getToken(): Promise<string> {
   return session.access_token
 }
 
+// FastAPI returns `detail` as a string for HTTPException but as a list of {loc,msg} for 422s.
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  const body = await res.json().catch(() => ({})) as { detail?: unknown }
+  const d = body.detail
+  if (typeof d === 'string') return d
+  if (Array.isArray(d)) {
+    return d
+      .map((e: { loc?: unknown[]; msg?: string }) => `${(e.loc ?? []).slice(1).join('.') || 'field'}: ${e.msg ?? 'invalid'}`)
+      .join('; ')
+  }
+  return fallback
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await getToken()
   const res = await fetch(`${API_BASE}${path}`, {
@@ -21,8 +34,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     },
   })
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { detail?: string }
-    throw new Error(body.detail ?? `Request failed (${res.status})`)
+    throw new Error(await errorMessage(res, `Request failed (${res.status})`))
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
@@ -238,8 +250,7 @@ export async function importStatement(file: File, bankName?: string): Promise<Im
     body: form,
   })
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { detail?: string }
-    throw new Error(body.detail ?? `Import failed (${res.status})`)
+    throw new Error(await errorMessage(res, `Import failed (${res.status})`))
   }
   return res.json() as Promise<ImportResult>
 }

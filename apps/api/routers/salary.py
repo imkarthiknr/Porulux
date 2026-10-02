@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/v1/salary", tags=["salary"])
 _TABLE = "salary_records"
 
 
-@router.post("/", response_model=SalaryRecord, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=SalaryRecord, status_code=status.HTTP_201_CREATED)
 async def create_salary_record(
     payload: SalaryCreate,
     user_id: str = Depends(get_current_user),
@@ -30,7 +30,7 @@ async def create_salary_record(
     return response.data[0]
 
 
-@router.get("/", response_model=list[SalaryRecord])
+@router.get("", response_model=list[SalaryRecord])
 async def list_salary_records(user_id: str = Depends(get_current_user)):
     client = get_supabase_client()
     response = (

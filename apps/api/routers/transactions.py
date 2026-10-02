@@ -44,7 +44,7 @@ async def list_categories():
     return CATEGORIES
 
 
-@router.get("/", response_model=list[Transaction])
+@router.get("", response_model=list[Transaction])
 async def list_transactions(
     month: Optional[str] = Query(None, description="YYYY-MM"),
     category: Optional[str] = None,
@@ -60,7 +60,7 @@ async def list_transactions(
     return q.order("transaction_date", desc=True).order("created_at", desc=True).limit(limit).execute().data
 
 
-@router.post("/", response_model=Transaction, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=Transaction, status_code=status.HTTP_201_CREATED)
 async def create_transaction(payload: TransactionCreate, user_id: str = Depends(get_current_user)):
     data = payload.model_dump(exclude_none=True, mode="json")
     data["user_id"] = user_id

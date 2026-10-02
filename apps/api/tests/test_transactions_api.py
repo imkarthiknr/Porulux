@@ -23,6 +23,8 @@ class FakeQuery:
     def gte(self, *_): return self
     def lte(self, *_): return self
     def limit(self, *_): return self
+    def lt(self, *_): return self
+    def order(self, *_, **__): return self
 
     def insert(self, rows):
         self.inserted = rows
@@ -82,3 +84,13 @@ def test_unsupported_type_rejected(api):
 def test_bad_csv_returns_422(api):
     res = api(FakeClient()).post("/api/v1/transactions/import", files={"file": ("a.csv", b"foo,bar\n1,2\n", "text/csv")})
     assert res.status_code == 422
+
+
+def test_trailing_slash_is_equivalent_and_never_redirects(api):
+    client = api(FakeClient())
+    for path in ("/api/v1/transactions/categories", "/api/v1/transactions/categories/"):
+        res = client.get(path, follow_redirects=False)
+        assert res.status_code == 200
+    # collection routes: slash or not, no 307
+    for path in ("/api/v1/transactions", "/api/v1/transactions/"):
+        assert client.get(path, follow_redirects=False).status_code == 200

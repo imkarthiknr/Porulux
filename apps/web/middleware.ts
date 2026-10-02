@@ -1,9 +1,12 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+
+type CookieToSet = { name: string; value: string; options?: Record<string, unknown> }
 
 export async function middleware(request: NextRequest) {
   // Mutable response — the Supabase client may rewrite session cookies on it.
   let supabaseResponse = NextResponse.next({ request })
+  let cacheHeaders: Record<string, string> = {}
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,7 +16,7 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+        setAll(cookiesToSet: CookieToSet[], headers: Record<string, string>) {
           // Propagate refreshed cookies onto both the forwarded request and
           // the response so that downstream server components see them too.
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
@@ -21,6 +24,9 @@ export async function middleware(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options),
           )
+          // Cache-Control etc. so a CDN never caches a response carrying a session cookie.
+          cacheHeaders = headers ?? {}
+          Object.entries(cacheHeaders).forEach(([k, v]) => supabaseResponse.headers.set(k, v))
         },
       },
     },
@@ -35,8 +41,13 @@ export async function middleware(request: NextRequest) {
   if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = '/login'
+    loginUrl.search = ''
     loginUrl.searchParams.set('next', request.nextUrl.pathname)
-    return NextResponse.redirect(loginUrl)
+    const redirect = NextResponse.redirect(loginUrl)
+    // Keep any cookies Supabase just cleared/refreshed.
+    supabaseResponse.cookies.getAll().forEach((c) => redirect.cookies.set(c))
+    Object.entries(cacheHeaders).forEach(([k, v]) => redirect.headers.set(k, v))
+    return redirect
   }
 
   return supabaseResponse

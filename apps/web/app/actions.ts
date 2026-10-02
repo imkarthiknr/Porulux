@@ -1,6 +1,6 @@
 'use server'
 
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 function serverSupabase() {
@@ -11,7 +11,7 @@ function serverSupabase() {
     {
       cookies: {
         getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
           cookiesToSet.forEach(({ name, value, options }) =>
             cookieStore.set(name, value, options),
           )

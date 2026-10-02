@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // FastAPI routes end in '/'; don't let Next strip it before proxying (FastAPI would then
+  // answer with a redirect to its internal host).
+  skipTrailingSlashRedirect: true,
   experimental: {
     // AI document extraction can take well over the 30s default
     proxyTimeout: 120_000,
