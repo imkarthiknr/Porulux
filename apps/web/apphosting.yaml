@@ -11,7 +11,7 @@ env:
     value: https://jjqzugizjsvxmshotsza.supabase.co
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_SUPABASE_ANON_KEY
-    value: YOUR-SUPABASE-ANON-KEY   # anon key is public by design
+    value: sb_publishable_ysU4ChhKtbH9JuO3vRo8tQ_GuYZAP0w   # publishable key is public by design
     availability: [BUILD, RUNTIME]
   # Cloud Run URL of the FastAPI service; used by the /api/* rewrite and server-side fetches.
   # NEXT_PUBLIC_API_URL is intentionally unset so the browser stays same-origin.
