@@ -8,7 +8,7 @@ runConfig:
 
 env:
   - variable: NEXT_PUBLIC_SUPABASE_URL
-    value: https://YOUR-PROJECT-REF.supabase.co
+    value: https://jjqzugizjsvxmshotsza.supabase.co
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_SUPABASE_ANON_KEY
     value: YOUR-SUPABASE-ANON-KEY   # anon key is public by design
@@ -16,5 +16,5 @@ env:
   # Cloud Run URL of the FastAPI service; used by the /api/* rewrite and server-side fetches.
   # NEXT_PUBLIC_API_URL is intentionally unset so the browser stays same-origin.
   - variable: API_URL
-    value: https://porulux-api-XXXXXXXX-el.a.run.app
+    value: https://porulux-api-872808570661.asia-south1.run.app
     availability: [BUILD, RUNTIME]
