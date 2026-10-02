@@ -134,7 +134,7 @@ async def import_statement(
     account_last4: Optional[str] = Form(None),
     user_id: str = Depends(get_current_user),
 ):
-    """Import a bank statement (CSV parsed locally; PDF/image extracted with Claude),
+    """Import a bank statement (CSV parsed locally; PDF/image extracted with Gemini),
     auto-categorise, and skip rows already imported."""
     media_type = (file.content_type or mimetypes.guess_type(file.filename or "")[0] or "").lower()
     name = (file.filename or "").lower()

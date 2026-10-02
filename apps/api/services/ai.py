@@ -1,30 +1,40 @@
 from __future__ import annotations
 
-import base64
 import json
 import os
 
-from anthropic import AsyncAnthropic
+from google import genai
+from google.genai import types
 
-MODEL = os.getenv("ANTHROPIC_MODEL", "claude-opus-5-5")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-_client: AsyncAnthropic | None = None
+_client: genai.Client | None = None
 
 
-def get_client() -> AsyncAnthropic:
+def get_client() -> genai.Client:
     global _client
     if _client is None:
-        _client = AsyncAnthropic()
+        _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     return _client
 
 
-def content_block(data: bytes, media_type: str) -> dict:
-    b64 = base64.standard_b64encode(data).decode()
-    if media_type == "application/pdf":
-        return {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}}
-    if media_type in ("image/jpeg", "image/png", "image/webp"):
-        return {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}}
-    return {"type": "text", "text": data.decode("utf-8", errors="replace")}
+def _part(data: bytes, media_type: str) -> types.Part:
+    if media_type in ("text/csv", "text/plain"):
+        return types.Part.from_text(text=data.decode("utf-8", errors="replace"))
+    return types.Part.from_bytes(data=data, mime_type=media_type)
+
+
+async def generate(data: bytes, media_type: str, prompt: str, *, max_tokens: int, json_output: bool = True) -> str:
+    """Send a document plus an instruction to Gemini and return the text response."""
+    config = types.GenerateContentConfig(
+        max_output_tokens=max_tokens,
+        temperature=0,
+        response_mime_type="application/json" if json_output else "text/plain",
+    )
+    res = await get_client().aio.models.generate_content(
+        model=MODEL, contents=[_part(data, media_type), prompt], config=config
+    )
+    return res.text or ""
 
 
 def parse_json(text: str):
@@ -51,16 +61,7 @@ TRANSACTIONS_PROMPT = (
 
 
 async def extract_transactions(data: bytes, media_type: str) -> list[dict]:
-    async with get_client().messages.stream(
-        model=MODEL,
-        max_tokens=16000,
-        messages=[{
-            "role": "user",
-            "content": [content_block(data, media_type), {"type": "text", "text": TRANSACTIONS_PROMPT}],
-        }],
-    ) as stream:
-        final = await stream.get_final_message()
-    raw = next((b.text for b in final.content if getattr(b, "type", None) == "text"), "")
+    raw = await generate(data, media_type, TRANSACTIONS_PROMPT, max_tokens=32000)
     result = parse_json(raw)
     if not isinstance(result, list):
         raise ValueError("Expected a JSON array of transactions")

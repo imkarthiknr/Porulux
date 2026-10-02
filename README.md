@@ -9,14 +9,14 @@
 | Web | Next.js 14 + Tailwind (`apps/web`) |
 | API | FastAPI (`apps/api`) |
 | DB / Auth | Supabase Postgres + RLS (`supabase/migrations`) |
-| AI extraction | Claude API (model via `ANTHROPIC_MODEL`) |
+| AI extraction | Gemini API (model via `GEMINI_MODEL`) |
 
 ## Running locally
 
 ```bash
 # API
 cd apps/api && python -m venv .venv && .venv/Scripts/pip install -r requirements.txt -r requirements-dev.txt
-cp .env.example .env   # fill in Supabase + Anthropic keys
+cp .env.example .env   # fill in Supabase + Gemini keys
 uvicorn main:app --reload
 pytest                 # unit tests (no network needed)
 
@@ -33,7 +33,7 @@ Apply `supabase/migrations/*.sql` in order to your Supabase project.
 - [x] Net worth dashboard (snapshot, history, asset breakdown)
 - [x] Manual entry for holdings, loans, EPF/NPS (`/dashboard/accounts`)
 - [x] Salary records + payslip upload with AI extraction
-- [x] Bank statement import: CSV (local parser) and PDF/image (Claude), auto-categorisation, duplicate skipping
+- [x] Bank statement import: CSV (local parser) and PDF/image (Gemini), auto-categorisation, duplicate skipping
 - [x] Monthly cash flow and spend-by-category view (`/dashboard/transactions`)
 - [ ] Budgets per category, spend trend charts, recurring payment detection
 
@@ -55,7 +55,7 @@ Apply `supabase/migrations/*.sql` in order to your Supabase project.
 
 ## Deploying (Firebase + Cloud Run, free tier)
 
-- **API** → Cloud Run (`asia-south1`, min instances 0): `gcloud run deploy porulux-api --source apps/api --region asia-south1 --allow-unauthenticated --min-instances 0 --max-instances 2 --memory 512Mi`. Keep `SUPABASE_SERVICE_ROLE_KEY` and `ANTHROPIC_API_KEY` in Secret Manager.
+- **API** → Cloud Run (`asia-south1`, min instances 0): `gcloud run deploy porulux-api --source apps/api --region asia-south1 --allow-unauthenticated --min-instances 0 --max-instances 2 --memory 512Mi`. Keep `SUPABASE_SERVICE_ROLE_KEY` and `GEMINI_API_KEY` in Secret Manager.
 - **Web** → Firebase App Hosting, root directory `apps/web`, live branch `main`; config in `apps/web/apphosting.yaml`.
 - The web app proxies `/api/*` to the Cloud Run service (`API_URL`), so the browser only ever talks to one origin and no CORS is needed. Firebase Hosting rewrites are not used because Hosting strips Supabase's `sb-*` auth cookies.
 - In Supabase → Authentication → URL Configuration, add the App Hosting URL and `/callback` as redirect URLs.
