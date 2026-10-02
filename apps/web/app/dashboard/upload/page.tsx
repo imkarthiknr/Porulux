@@ -311,7 +311,7 @@ export default function UploadPage() {
               />
             </div>
             <p className="text-xs text-slate-400">
-              {progress < 100 ? `Uploading… ${progress}%` : 'Processing with Claude…'}
+              {progress < 100 ? `Uploading… ${progress}%` : 'Extracting with AI…'}
             </p>
           </div>
         )}

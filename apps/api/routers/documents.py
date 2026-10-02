@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import base64
 import json
 import mimetypes
 
-from anthropic import AsyncAnthropic
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from core.auth import get_current_user
 from schemas.documents import UploadResponse
+from services.ai import generate, parse_json
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
-
-_client = AsyncAnthropic()
 
 ALLOWED_MEDIA_TYPES = {
     "application/pdf",
@@ -67,30 +64,6 @@ AUTO_DETECT_PROMPT = (
 )
 
 
-def _content_block(data: bytes, media_type: str) -> dict:
-    b64 = base64.standard_b64encode(data).decode()
-    if media_type == "application/pdf":
-        return {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}}
-    if media_type in ("image/jpeg", "image/png", "image/webp"):
-        return {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}}
-    # CSV / plain text
-    return {"type": "text", "text": data.decode("utf-8", errors="replace")}
-
-
-def _parse_json(text: str) -> dict:
-    """Strip optional markdown code fences, then parse JSON."""
-    s = text.strip()
-    if "```" in s:
-        for part in s.split("```"):
-            part = part.strip()
-            if part.startswith("json"):
-                part = part[4:].strip()
-            if part.startswith("{"):
-                s = part
-                break
-    return json.loads(s)
-
-
 @router.post("/upload", response_model=UploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
@@ -111,43 +84,20 @@ async def upload_document(
     if len(content) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File exceeds 20 MB limit.")
 
-    block = _content_block(content, media_type)
     resolved = doc_type if doc_type in EXTRACTION_PROMPTS else "auto"
 
     # Step 1: Auto-detect document type when not specified
     if resolved == "auto":
-        detect = await _client.messages.create(
-            model="claude-opus-4-8",
-            max_tokens=50,
-            messages=[{
-                "role": "user",
-                "content": [block, {"type": "text", "text": AUTO_DETECT_PROMPT}],
-            }],
-        )
-        resolved = detect.content[0].text.strip().lower()
+        detected = await generate(content, media_type, AUTO_DETECT_PROMPT, max_tokens=20, json_output=False)
+        resolved = detected.strip().lower()
         if resolved not in EXTRACTION_PROMPTS:
             return UploadResponse(doc_type="unknown", data={}, confidence="low")
 
-    # Step 2: Extract structured data with streaming (documents can be large)
-    prompt = EXTRACTION_PROMPTS[resolved]
-    async with _client.messages.stream(
-        model="claude-opus-4-8",
-        max_tokens=4096,
-        thinking={"type": "adaptive"},
-        messages=[{
-            "role": "user",
-            "content": [block, {"type": "text", "text": prompt}],
-        }],
-    ) as stream:
-        final = await stream.get_final_message()
-
-    raw = next(
-        (b.text for b in final.content if getattr(b, "type", None) == "text"),
-        "",
-    )
+    # Step 2: Extract structured data
+    raw = await generate(content, media_type, EXTRACTION_PROMPTS[resolved], max_tokens=8192)
 
     try:
-        data = _parse_json(raw)
+        data = parse_json(raw)
     except (json.JSONDecodeError, ValueError):
         return UploadResponse(doc_type=resolved, data={}, raw_extraction=raw, confidence="low")
 
