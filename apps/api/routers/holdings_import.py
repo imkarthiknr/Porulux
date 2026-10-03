@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import logging
 import mimetypes
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from core.auth import AuthUser, get_auth_user
 from core.supabase import get_supabase_client
@@ -121,6 +121,16 @@ class ConfirmBody(BaseModel):
     source: str = Field(..., min_length=1, max_length=60)
     rows: list[ConfirmRow] = Field(..., max_length=_MAX_ROWS)
     remove_ids: list[UUID] = Field(default_factory=list, max_length=_MAX_ROWS)
+    # Statements carry no purchase dates. When given, each imported holding that has no real lots gets one
+    # approximate BUY lot on this date (units x average cost), which makes XIRR available, flagged approximate.
+    assumed_buy_date: Optional[date] = None
+
+    @field_validator("assumed_buy_date")
+    @classmethod
+    def _not_future(cls, v):
+        if v is not None and (v > date.today() or v.year < 1980):
+            raise ValueError("held-since date must be in the past")
+        return v
 
 
 @router.post("/confirm")
@@ -137,7 +147,8 @@ async def confirm(body: ConfirmBody, user: AuthUser = Depends(get_auth_user)):
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="One of the holdings no longer exists. Preview the file again.")
     removable = [str(i) for i in body.remove_ids if str(i) in mine and mine[str(i)].get("source") == source]
 
-    inserts, updated = [], 0
+    inserts, insert_rows, updated = [], [], 0
+    touched: list[tuple[str, ConfirmRow]] = []   # (holding id, row) for assumed lots
     for row in body.rows:
         fields = {
             "name": row.name.strip(), "symbol": row.symbol.strip(), "isin": row.isin, "holding_type": row.holding_type,
@@ -149,11 +160,28 @@ async def confirm(body: ConfirmBody, user: AuthUser = Depends(get_auth_user)):
             patch = {k: v for k, v in fields.items() if v is not None}
             client.table("holdings").update(patch).eq("id", str(row.existing_id)).eq("user_id", user.id).execute()
             updated += 1
+            touched.append((str(row.existing_id), row))
         else:
             inserts.append({**{k: v for k, v in fields.items() if v is not None}, "user_id": user.id})
+            insert_rows.append(row)
     for i in range(0, len(inserts), 500):
-        client.table("holdings").insert(inserts[i:i + 500]).execute()
+        created = client.table("holdings").insert(inserts[i:i + 500]).execute().data
+        touched += [(str(c["id"]), r) for c, r in zip(created, insert_rows[i:i + 500])]
     for hid in removable:
         client.table("holdings").delete().eq("id", hid).eq("user_id", user.id).execute()
 
-    return {"inserted": len(inserts), "updated": updated, "removed": len(removable)}
+    assumed = 0
+    if body.assumed_buy_date and touched:
+        lots = client.table("holding_lots").select("holding_id,assumed").eq("user_id", user.id).execute().data
+        has_real = {str(l["holding_id"]) for l in lots if not l.get("assumed")}
+        for hid, row in touched:
+            if hid in has_real or row.avg_buy_price is None:
+                continue   # real purchase dates always win; no cost basis means nothing to place
+            client.table("holding_lots").delete().eq("holding_id", hid).eq("user_id", user.id).eq("assumed", True).execute()
+            client.table("holding_lots").insert({
+                "user_id": user.id, "holding_id": hid, "lot_date": body.assumed_buy_date.isoformat(),
+                "lot_type": "BUY", "units": row.units, "price": row.avg_buy_price, "assumed": True,
+            }).execute()
+            assumed += 1
+
+    return {"inserted": len(inserts), "updated": updated, "removed": len(removable), "assumed_lots": assumed}

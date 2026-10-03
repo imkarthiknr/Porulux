@@ -11,6 +11,20 @@ import {
 } from '@/lib/api'
 import { formatINR } from '@/lib/format'
 
+const ago = (iso?: string | null) => {
+  if (!iso) return null
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  if (mins < 1440) return `${Math.round(mins / 60)} h ago`
+  return `${Math.round(mins / 1440)} d ago`
+}
+const PRICE_DOT: Record<string, { cls: string; tip: string }> = {
+  live: { cls: 'bg-emerald-500', tip: 'Live price' },
+  cached: { cls: 'bg-emerald-300', tip: 'Recent price (refreshed in the last few minutes)' },
+  stale: { cls: 'bg-amber-500', tip: 'Could not fetch a new price. Showing the last known one.' },
+  manual: { cls: 'bg-slate-300', tip: 'No automatic price for this type. Update it by hand under Accounts.' },
+}
 const pct = (n: number | null | undefined) => (n == null ? '—' : `${n > 0 ? '+' : ''}${n.toFixed(2)}%`)
 const tone = (n: number | null | undefined) => (n == null ? 'text-slate-500' : n >= 0 ? 'text-green-600' : 'text-red-600')
 
@@ -57,7 +71,7 @@ function Lots({ holding, onChange }: { holding: HoldingReturn; onChange: () => v
           <tbody>
             {lots.map((l) => (
               <tr key={l.id} className="border-t border-slate-200">
-                <td className="py-1">{l.lot_date}</td><td>{l.lot_type}</td>
+                <td className="py-1">{l.lot_date}{l.assumed && <span className="ml-1 text-[10px] text-amber-600">approx.</span>}</td><td>{l.lot_type}</td>
                 <td className="text-right">{l.units}</td><td className="text-right">{formatINR(l.price)}</td>
                 <td className="text-right"><button onClick={() => onDelete(l.id)} className="text-red-500 hover:text-red-700">Delete</button></td>
               </tr>
@@ -84,8 +98,21 @@ export default function InvestmentsPage() {
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    try { setData(await getInvestmentReturns()); setError(null) } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
+  const [refreshing, setRefreshing] = useState(false)
+
+  // Show stored prices straight away, then replace them with live ones. Gains and XIRR are recomputed
+  // by the API from whatever price it holds, so they move as soon as the live prices land.
+  const load = useCallback(async (mode: 'auto' | 'force' = 'auto') => {
+    setError(null)
+    try {
+      if (mode === 'auto') setData(await getInvestmentReturns('off'))
+      setRefreshing(true)
+      setData(await getInvestmentReturns(mode))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load')
+    } finally {
+      setRefreshing(false)
+    }
   }, [])
   useEffect(() => { load() }, [load])
 
@@ -106,7 +133,7 @@ export default function InvestmentsPage() {
 
         {error && <p className="text-sm text-red-500">{error}</p>}
         {!data && !error && <p className="text-sm text-slate-400">Loading…</p>}
-        {data && <HoldingsImporter onImported={load} startOpen={data.holdings.length === 0} />}
+        {data && <HoldingsImporter onImported={() => load()} startOpen={data.holdings.length === 0} />}
 
         {data && data.holdings.length === 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
@@ -117,13 +144,24 @@ export default function InvestmentsPage() {
 
         {p && data!.holdings.length > 0 && (
           <>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+              <span>
+                {refreshing ? 'Updating prices…' : data!.prices?.updated_at ? `Prices updated ${ago(data!.prices.updated_at)}` : 'Prices not refreshed yet'}
+                {!refreshing && data!.prices && data!.prices.stale > 0 && (
+                  <span className="text-amber-600"> · {data!.prices.stale} holding{data!.prices.stale === 1 ? '' : 's'} could not be priced</span>
+                )}
+              </span>
+              <button onClick={() => load('force')} disabled={refreshing} className="text-indigo-600 hover:text-indigo-800 disabled:opacity-50">
+                Refresh prices
+              </button>
+            </div>
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
               {[
                 ['Invested', formatINR(p.invested), ''],
                 ['Current value', formatINR(p.current_value), ''],
                 ['Gain / loss', `${p.gain < 0 ? '-' : ''}${formatINR(p.gain)}`, tone(p.gain)],
                 ['Absolute return', pct(p.absolute_return_pct), tone(p.absolute_return_pct)],
-                ['XIRR', pct(p.xirr_pct), tone(p.xirr_pct)],
+                [p.xirr_approx ? 'XIRR (approx.)' : 'XIRR', `${p.xirr_approx && p.xirr_pct != null ? '~' : ''}${pct(p.xirr_pct)}`, tone(p.xirr_pct)],
               ].map(([label, value, cls]) => (
                 <div key={label} className="bg-white rounded-2xl border border-slate-200 p-5">
                   <p className="text-xs text-slate-500 uppercase tracking-wide">{label}</p>
@@ -132,7 +170,7 @@ export default function InvestmentsPage() {
               ))}
             </div>
             {p.xirr_pct == null && (
-              <p className="text-xs text-slate-500">XIRR needs dated buy lots. Expand a holding and add when you bought it.</p>
+              <p className="text-xs text-slate-500">XIRR needs buy dates. Expand a holding and add when you bought it, or import again with “Held since”.</p>
             )}
 
             <section className="bg-white rounded-2xl border border-slate-200 p-6 overflow-x-auto">
@@ -153,12 +191,18 @@ export default function InvestmentsPage() {
                       <tr className="border-b border-slate-50">
                         <td className="py-2 pr-4">
                           <p className="font-medium text-slate-800">{h.name}</p>
-                          <p className="text-xs text-slate-500">{h.symbol} · {h.holding_type} · {h.units} units · {h.lots} lots{h.source ? ` · ${h.source}` : ''}</p>
+                          <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                            {h.price_status && (
+                              <span title={`${PRICE_DOT[h.price_status].tip}${h.price_source ? ` (${h.price_source})` : ''}`}
+                                className={`inline-block w-2 h-2 rounded-full ${PRICE_DOT[h.price_status].cls}`} />
+                            )}
+                            <span>{h.symbol} · {h.holding_type} · {h.units} units · {h.lots} lots{h.source ? ` · ${h.source}` : ''}</span>
+                          </p>
                         </td>
                         <td className="py-2 pr-4 text-right">{h.invested == null ? '—' : formatINR(h.invested)}</td>
                         <td className="py-2 pr-4 text-right">{h.current_value == null ? '—' : formatINR(h.current_value)}</td>
                         <td className={`py-2 pr-4 text-right ${tone(h.absolute_return_pct)}`}>{pct(h.absolute_return_pct)}</td>
-                        <td className={`py-2 pr-4 text-right ${tone(h.xirr_pct)}`}>{pct(h.xirr_pct)}</td>
+                        <td className={`py-2 pr-4 text-right ${tone(h.xirr_pct)}`} title={h.xirr_approx ? 'Estimated from your “held since” date, not real purchase dates' : undefined}>{h.xirr_approx && h.xirr_pct != null ? '~' : ''}{pct(h.xirr_pct)}</td>
                         <td className="py-2 text-right">
                           <button onClick={() => setOpen(open === h.holding_id ? null : h.holding_id)} className="text-xs text-indigo-600 hover:text-indigo-800">
                             {open === h.holding_id ? 'Hide lots' : 'Lots'}
@@ -166,7 +210,7 @@ export default function InvestmentsPage() {
                         </td>
                       </tr>
                       {open === h.holding_id && (
-                        <tr><td colSpan={6} className="pb-3"><Lots holding={h} onChange={load} /></td></tr>
+                        <tr><td colSpan={6} className="pb-3"><Lots holding={h} onChange={() => load()} /></td></tr>
                       )}
                     </Fragment>
                   ))}

@@ -387,7 +387,11 @@ export interface HoldingReturn {
   gain: number | null
   absolute_return_pct: number | null
   xirr_pct: number | null
+  xirr_approx?: boolean
   lots: number
+  price_status?: 'live' | 'cached' | 'stale' | 'manual'
+  price_source?: string | null
+  price_updated_at?: string | null
 }
 export interface InvestmentReturns {
   holdings: HoldingReturn[]
@@ -397,12 +401,17 @@ export interface InvestmentReturns {
     gain: number
     absolute_return_pct: number | null
     xirr_pct: number | null
+    xirr_approx?: boolean
   }
+  prices?: { updated_at: string | null; live: number; cached: number; stale: number; manual: number }
 }
-export const getInvestmentReturns = () => apiFetch<InvestmentReturns>('/api/v1/investments/returns')
+// refresh: 'off' = stored prices instantly, 'auto' = refresh anything older than the freshness window, 'force' = refresh all
+export const getInvestmentReturns = (refresh: 'auto' | 'force' | 'off' = 'auto') =>
+  apiFetch<InvestmentReturns>(`/api/v1/investments/returns?refresh=${refresh}`)
 
 export interface Lot {
   id: string
+  assumed?: boolean
   lot_date: string
   lot_type: 'BUY' | 'SELL'
   units: number
@@ -658,8 +667,8 @@ export interface ConfirmRowBody {
   existing_id: string | null
 }
 
-export const confirmHoldingsImport = (body: { source: string; rows: ConfirmRowBody[]; remove_ids: string[] }) =>
-  apiFetch<{ inserted: number; updated: number; removed: number }>('/api/v1/investments/import/confirm', {
+export const confirmHoldingsImport = (body: { source: string; rows: ConfirmRowBody[]; remove_ids: string[]; assumed_buy_date?: string }) =>
+  apiFetch<{ inserted: number; updated: number; removed: number; assumed_lots: number }>('/api/v1/investments/import/confirm', {
     method: 'POST',
     body: JSON.stringify(body),
   })

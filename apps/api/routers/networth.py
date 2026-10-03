@@ -6,6 +6,7 @@ from supabase import Client
 from core.auth import get_current_user
 from core.supabase import get_supabase_client
 from services.cards import total_card_dues
+from services.prices import refresh_for_user
 from schemas.networth import NetWorthBreakdown, NetWorthHistoryEntry, NetWorthSnapshot
 
 router = APIRouter(prefix="/api/v1/networth", tags=["networth"])
@@ -79,6 +80,10 @@ async def get_networth_snapshot(user_id: str = Depends(get_current_user)):
 @router.post("/snapshot", response_model=NetWorthSnapshot, status_code=201)
 async def save_networth_snapshot(user_id: str = Depends(get_current_user)):
     client = get_supabase_client()
+    try:  # fresh prices make the snapshot honest; a slow provider must never block the dashboard
+        await refresh_for_user(client, user_id, budget_seconds=5.0)
+    except Exception:
+        pass
     snapshot = _compute_snapshot(client, user_id)
 
     client.table("networth_log").upsert(

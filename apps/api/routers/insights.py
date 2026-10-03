@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,12 +11,14 @@ from pydantic import BaseModel, Field
 
 from core.auth import get_current_user
 from core.supabase import get_supabase_client
+from services.prices import refresh_for_user
 from services.loan_math import build_schedule, summarize
 from services.recurring import detect_recurring
 from services.xirr import xirr
 
 OPENING_BALANCE = "Opening Balance"
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["insights"])
 
 
@@ -135,8 +138,11 @@ async def list_lots(holding_id: str, user_id: str = Depends(get_current_user)):
 @router.post("/holdings/{holding_id}/lots", status_code=status.HTTP_201_CREATED)
 async def add_lot(holding_id: str, payload: LotCreate, user_id: str = Depends(get_current_user)):
     _own_holding(user_id, holding_id)
+    client = get_supabase_client()
+    # Real purchase dates supersede the "held since (approx.)" placeholder made at import time.
+    client.table("holding_lots").delete().eq("holding_id", holding_id).eq("user_id", user_id).eq("assumed", True).execute()
     row = {**payload.model_dump(mode="json"), "holding_id": holding_id, "user_id": user_id}
-    return get_supabase_client().table("holding_lots").insert(row).execute().data[0]
+    return client.table("holding_lots").insert(row).execute().data[0]
 
 
 @router.delete("/lots/{lot_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -151,8 +157,20 @@ def _pct(x: float | None) -> float | None:
 
 
 @router.get("/investments/returns")
-async def investment_returns(user_id: str = Depends(get_current_user)):
+async def investment_returns(
+    refresh: Literal["auto", "force", "off"] = "auto",
+    user_id: str = Depends(get_current_user),
+):
+    """Returns per holding and overall. By default prices are refreshed first (skipping any fetched within the
+    freshness window), so XIRR and gains reflect today's value on every load. refresh=off returns stored prices
+    instantly; refresh=force bypasses the freshness window."""
     client = get_supabase_client()
+    report: dict[str, dict] = {}
+    if refresh != "off":
+        try:
+            report = await refresh_for_user(client, user_id, force=(refresh == "force"))
+        except Exception:
+            logger.warning("price refresh failed; using stored prices", exc_info=True)
     holdings = client.table("holdings").select("*").eq("user_id", user_id).execute().data
     lots = client.table("holding_lots").select("*").eq("user_id", user_id).execute().data
     by_holding: dict[str, list[dict]] = defaultdict(list)
@@ -162,6 +180,9 @@ async def investment_returns(user_id: str = Depends(get_current_user)):
     today = date.today()
     out, portfolio_flows = [], []
     total_cost = total_value = 0.0
+    portfolio_approx = False
+    status_counts: dict[str, int] = defaultdict(int)
+    latest_price_time = None
     for h in holdings:
         hl = by_holding.get(h["id"], [])
         price = float(h["current_price"]) if h.get("current_price") is not None else None
@@ -179,20 +200,28 @@ async def investment_returns(user_id: str = Depends(get_current_user)):
             for l in hl
         ]
         rate = None
+        approx = bool(hl) and all(l.get("assumed") for l in hl)
         if flows and value is not None and value > 0:
             rate = xirr(flows + [(today, value)])
             portfolio_flows += flows + [(today, value)]
+            portfolio_approx = portfolio_approx or approx
 
         if cost is not None and value is not None:
             total_cost += cost
             total_value += value
+        rep = report.get(str(h["id"]))
+        pstatus = rep["status"] if rep else ("manual" if h.get("holding_type") not in ("STOCK", "ETF", "MF") else "cached")
+        status_counts[pstatus] += 1
+        if h.get("price_updated_at") and (latest_price_time is None or str(h["price_updated_at"]) > latest_price_time):
+            latest_price_time = str(h["price_updated_at"])
         out.append({
             "holding_id": h["id"], "source": h.get("source"), "symbol": h["symbol"], "name": h["name"], "holding_type": h["holding_type"],
             "units": units, "invested": round(cost, 2) if cost is not None else None,
             "current_value": round(value, 2) if value is not None else None,
             "gain": round(value - cost, 2) if cost is not None and value is not None else None,
             "absolute_return_pct": _pct((value - cost) / cost) if cost and value is not None else None,
-            "xirr_pct": _pct(rate), "lots": len(hl),
+            "xirr_pct": _pct(rate), "xirr_approx": approx and rate is not None, "lots": len(hl),
+            "price_status": pstatus, "price_source": h.get("price_source"), "price_updated_at": h.get("price_updated_at"),
         })
 
     return {
@@ -202,7 +231,9 @@ async def investment_returns(user_id: str = Depends(get_current_user)):
             "gain": round(total_value - total_cost, 2),
             "absolute_return_pct": _pct((total_value - total_cost) / total_cost) if total_cost else None,
             "xirr_pct": _pct(xirr(portfolio_flows)) if portfolio_flows else None,
+            "xirr_approx": portfolio_approx,
         },
+        "prices": {"updated_at": latest_price_time, **{k: status_counts.get(k, 0) for k in ("live", "cached", "stale", "manual")}},
     }
 
 

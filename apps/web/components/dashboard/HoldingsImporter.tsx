@@ -34,11 +34,12 @@ export default function HoldingsImporter({ onImported, startOpen }: { onImported
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [rows, setRows] = useState<Row[]>([])
   const [removeMissing, setRemoveMissing] = useState(false)
+  const [heldSince, setHeldSince] = useState('')
   const [done, setDone] = useState<string | null>(null)
 
   function reset() {
     setFile(null); setPassword(''); setNeedsPassword(false); setError(null); setKeyProblem(false)
-    setPreview(null); setRows([]); setRemoveMissing(false)
+    setPreview(null); setRows([]); setRemoveMissing(false); setHeldSince('')
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -80,8 +81,9 @@ export default function HoldingsImporter({ onImported, startOpen }: { onImported
           avg_buy_price: x.avg_buy_price, current_price: x.current_price, existing_id: x.existing_id,
         })),
         remove_ids: removeMissing ? preview.missing.map((m) => m.id) : [],
+        assumed_buy_date: heldSince || undefined,
       })
-      setDone(`Done: ${r.inserted} added, ${r.updated} updated${r.removed ? `, ${r.removed} removed` : ''}. Add buy dates under “Lots” on any holding to get its XIRR.`)
+      setDone(`Done: ${r.inserted} added, ${r.updated} updated${r.removed ? `, ${r.removed} removed` : ''}. ${r.assumed_lots ? `XIRR is an estimate based on your “held since” date. Add real buy dates under “Lots” to sharpen it.` : 'Add buy dates under “Lots” on any holding, or import again with “Held since”, to get XIRR.'}`)
       reset()
       onImported()
     } catch (err) {
@@ -224,6 +226,15 @@ export default function HoldingsImporter({ onImported, startOpen }: { onImported
                   </span>
                 </label>
               )}
+
+              <label className="block text-xs text-slate-600 space-y-1">
+                <span>Held since (optional, approximate)</span>
+                <input type="date" value={heldSince} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setHeldSince(e.target.value)} className={input} />
+                <span className="block text-slate-400">
+                  Statements don&apos;t include purchase dates. Give a rough date and Porulux estimates XIRR for holdings that have no dated lots (shown as approximate).
+                  You can add real buy dates later; those take over.
+                </span>
+              </label>
 
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex flex-wrap gap-2 items-center">

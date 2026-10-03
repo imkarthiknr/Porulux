@@ -123,7 +123,7 @@ def test_confirm_inserts_updates_removes_and_tags_source(monkeypatch):
         "rows": [row(existing_id=mine), row(name="Reliance", symbol="RELIANCE", units=5, avg_buy_price=2400, current_price=2500)],
         "remove_ids": [sold, groww],                   # Groww's must be refused: different source
     })
-    assert res.status_code == 200 and res.json() == {"inserted": 1, "updated": 1, "removed": 1}
+    assert res.status_code == 200 and res.json() == {"inserted": 1, "updated": 1, "removed": 1, "assumed_lots": 0}
     rows = {r["id"]: r for r in db.tables["holdings"]}
     assert rows[mine]["source"] == "Zerodha" and rows[mine]["units"] == 10 and rows[mine]["current_price"] == 1500
     assert sold not in rows and groww in rows and theirs in rows
