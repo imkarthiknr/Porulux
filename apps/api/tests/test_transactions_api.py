@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
-from core.auth import get_current_user
+from core.auth import AuthUser, get_auth_user, get_current_user
 from routers import transactions
 
 CSV = b"""Date,Narration,Debit,Credit
@@ -46,6 +46,7 @@ class FakeClient:
 @pytest.fixture
 def api(monkeypatch):
     main.app.dependency_overrides[get_current_user] = lambda: "user-1"
+    main.app.dependency_overrides[get_auth_user] = lambda: AuthUser("user-1", None)
     holder = {}
 
     def install(client):

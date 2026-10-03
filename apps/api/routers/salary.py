@@ -3,7 +3,7 @@ from postgrest.exceptions import APIError
 
 from core.auth import get_current_user
 from core.supabase import get_supabase_client
-from schemas.salary import SalaryCreate, SalaryRecord
+from schemas.salary import SalaryCreate, SalaryRecord, SalaryUpdate
 
 router = APIRouter(prefix="/api/v1/salary", tags=["salary"])
 
@@ -61,6 +61,29 @@ async def get_salary_record(
     if response.data is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
     return response.data
+
+
+@router.patch("/{record_id}", response_model=SalaryRecord)
+async def update_salary_record(
+    record_id: str,
+    payload: SalaryUpdate,
+    user_id: str = Depends(get_current_user),
+):
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+    try:
+        response = (
+            get_supabase_client().table(_TABLE).update(data)
+            .eq("id", record_id).eq("user_id", user_id).execute()
+        )
+    except APIError as exc:
+        if exc.code == "23505":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A salary record for that month already exists")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message)
+    if not response.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
+    return response.data[0]
 
 
 @router.delete("/{record_id}", status_code=status.HTTP_204_NO_CONTENT)

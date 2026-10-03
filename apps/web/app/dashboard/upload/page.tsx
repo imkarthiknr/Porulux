@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { useCallback, useRef, useState } from 'react'
 
 import { formatINR } from '@/lib/format'
-import { cleanPasswordMessage, importStatement, isPasswordError, savePayslip, uploadDocument, type DocType, type UploadResult } from '@/lib/api'
+import AIKeyBanner from '@/components/dashboard/AIKeyBanner'
+import { cleanKeyMessage, cleanPasswordMessage, importStatement, isKeyError, isPasswordError, savePayslip, uploadDocument, type DocType, type UploadResult } from '@/lib/api'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -173,7 +174,7 @@ export default function UploadPage() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Upload failed'
         setNeedsPassword(isPasswordError(msg))
-        setError(isPasswordError(msg) ? cleanPasswordMessage(msg) : msg)
+        setError(isPasswordError(msg) ? cleanPasswordMessage(msg) : isKeyError(msg) ? cleanKeyMessage(msg) : msg)
         setStage('error')
       }
     },
@@ -264,6 +265,8 @@ export default function UploadPage() {
             AI-powered extraction for payslips, bank statements, Form 16, and CAS statements.
           </p>
         </div>
+
+        <AIKeyBanner />
 
         {/* Doc type selector */}
         <div className="flex gap-2 flex-wrap">

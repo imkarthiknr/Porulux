@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+from datetime import datetime
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from .supabase import get_supabase_client
@@ -5,9 +8,15 @@ from .supabase import get_supabase_client
 security = HTTPBearer()
 
 
-async def get_current_user(
+@dataclass(frozen=True)
+class AuthUser:
+    id: str
+    created_at: datetime | None
+
+
+async def get_auth_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-) -> str:
+) -> AuthUser:
     token = credentials.credentials
     client = get_supabase_client()
     try:
@@ -24,4 +33,8 @@ async def get_current_user(
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return response.user.id
+    return AuthUser(id=response.user.id, created_at=getattr(response.user, "created_at", None))
+
+
+async def get_current_user(user: AuthUser = Depends(get_auth_user)) -> str:
+    return user.id

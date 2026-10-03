@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import DashboardNav from '@/components/dashboard/DashboardNav'
+import AIKeyBanner from '@/components/dashboard/AIKeyBanner'
+import RecurringPayments from '@/components/dashboard/RecurringPayments'
+import SpendTrendChart from '@/components/dashboard/SpendTrendChart'
 import {
-  cleanPasswordMessage, isPasswordError,
-  deleteTransaction, getMonthlySummary, importStatement, listCategories, listTransactions,
-  updateTransactionCategory,
+  cleanKeyMessage, cleanPasswordMessage, isKeyError, isPasswordError,
+  createTransaction, deleteTransaction, getMonthlySummary, importStatement, listCategories, listTransactions,
+  updateTransaction, updateTransactionCategory,
   type MonthlySummary, type Transaction,
 } from '@/lib/api'
 import { formatINR } from '@/lib/format'
@@ -28,6 +31,10 @@ export default function TransactionsPage() {
   const [importing, setImporting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [editing, setEditing] = useState<string | 'new' | null>(null)
+  const [form, setForm] = useState({ date: '', description: '', amount: '', kind: 'debit', category: '' })
+  const [saving, setSaving] = useState(false)
   const [password, setPassword] = useState('')
   const [needsPassword, setNeedsPassword] = useState(false)
 
@@ -40,6 +47,7 @@ export default function TransactionsPage() {
       ])
       setTxns(t)
       setSummary(s)
+      setRefreshKey((k) => k + 1)
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
@@ -69,7 +77,7 @@ export default function TransactionsPage() {
         setImportMsg(cleanPasswordMessage(msg))
       } else {
         setNeedsPassword(false)
-        setImportMsg(msg)
+        setImportMsg(isKeyError(msg) ? cleanKeyMessage(msg) : msg)
       }
     } finally {
       setImporting(false)
@@ -83,6 +91,42 @@ export default function TransactionsPage() {
     setPassword('')
     setNeedsPassword(false)
     runImport(file)
+  }
+
+  function startNew() {
+    const today = new Date().toISOString().slice(0, 10)
+    setForm({ date: today.startsWith(month) ? today : `${month}-01`, description: '', amount: '', kind: 'debit', category: '' })
+    setEditing('new')
+  }
+
+  function startEdit(t: Transaction) {
+    setForm({
+      date: t.transaction_date, description: t.description, amount: String(Math.abs(t.amount)),
+      kind: t.amount < 0 ? 'debit' : 'credit', category: t.category ?? '',
+    })
+    setEditing(t.id)
+  }
+
+  async function onSubmitForm(e: React.FormEvent) {
+    e.preventDefault()
+    const magnitude = Math.abs(Number(form.amount))
+    const body: Record<string, unknown> = {
+      transaction_date: form.date,
+      description: form.description.trim(),
+      amount: form.kind === 'debit' ? -magnitude : magnitude,
+    }
+    if (form.category) body.category = form.category
+    setSaving(true)
+    try {
+      if (editing === 'new') await createTransaction(body)
+      else if (editing) await updateTransaction(editing, body)
+      setEditing(null)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function onRecategorise(id: string, cat: string) {
@@ -123,6 +167,12 @@ export default function TransactionsPage() {
             />
             <input ref={fileRef} type="file" accept=".csv,.pdf,image/*" onChange={onFile} className="hidden" />
             <button
+              onClick={startNew}
+              className="rounded-lg border border-slate-300 bg-white text-sm font-medium px-4 py-2 hover:border-indigo-300"
+            >
+              Add transaction
+            </button>
+            <button
               onClick={() => fileRef.current?.click()}
               disabled={importing}
               className="rounded-lg bg-indigo-600 text-white text-sm font-medium px-4 py-2 hover:bg-indigo-700 disabled:opacity-50"
@@ -131,6 +181,8 @@ export default function TransactionsPage() {
             </button>
           </div>
         </div>
+
+        <AIKeyBanner />
 
         {importing && (
           <p className="text-sm text-slate-600 bg-white border border-slate-200 rounded-lg px-4 py-2 flex items-center gap-2">
@@ -183,6 +235,54 @@ export default function TransactionsPage() {
           </div>
         )}
 
+        {editing && (
+          <form onSubmit={onSubmitForm} className="bg-white rounded-2xl border border-indigo-200 p-6 space-y-4">
+            <h2 className="text-sm font-semibold text-slate-900">{editing === 'new' ? 'Add a transaction' : 'Edit transaction'}</h2>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+              <label className="text-xs text-slate-600 space-y-1">
+                <span>Date</span>
+                <input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-xs text-slate-600 space-y-1 md:col-span-2">
+                <span>Description</span>
+                <input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-xs text-slate-600 space-y-1">
+                <span>Type</span>
+                <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                  <option value="debit">Money out</option>
+                  <option value="credit">Money in</option>
+                </select>
+              </label>
+              <label className="text-xs text-slate-600 space-y-1">
+                <span>Amount (₹)</span>
+                <input type="number" step="0.01" min="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-xs text-slate-600 space-y-1">
+                <span>Category</span>
+                <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                  <option value="">{editing === 'new' ? 'Auto-detect' : 'Keep current'}</option>
+                  {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="flex gap-2">
+              <button type="submit" disabled={saving} className="rounded-lg bg-indigo-600 text-white text-sm font-medium px-4 py-2 hover:bg-indigo-700 disabled:opacity-50">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" onClick={() => setEditing(null)} className="rounded-lg border border-slate-300 text-sm px-4 py-2 text-slate-600">Cancel</button>
+            </div>
+          </form>
+        )}
+
+        <SpendTrendChart refreshKey={refreshKey} />
+        <RecurringPayments refreshKey={refreshKey} />
+
         <section className="bg-white rounded-2xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-slate-900">Transactions</h2>
@@ -224,7 +324,10 @@ export default function TransactionsPage() {
                       <td className={`py-2 pr-4 text-right whitespace-nowrap font-medium ${t.amount < 0 ? 'text-red-600' : 'text-green-600'}`}>
                         {t.amount < 0 ? '-' : '+'}{formatINR(t.amount)}
                       </td>
-                      <td className="py-2 text-right"><button onClick={() => onDelete(t.id)} className="text-xs text-red-500 hover:text-red-700">Delete</button></td>
+                      <td className="py-2 text-right whitespace-nowrap">
+                        <button onClick={() => startEdit(t)} className="text-xs text-indigo-600 hover:text-indigo-800 mr-3">Edit</button>
+                        <button onClick={() => onDelete(t.id)} className="text-xs text-red-500 hover:text-red-700">Delete</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

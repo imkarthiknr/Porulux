@@ -5,7 +5,10 @@ const LINKS = [
   { href: '/dashboard/accounts', label: 'Accounts' },
   { href: '/dashboard/transactions', label: 'Transactions' },
   { href: '/dashboard/salary', label: 'Salary' },
+  { href: '/dashboard/investments', label: 'Investments' },
+  { href: '/dashboard/loans', label: 'Loans' },
   { href: '/dashboard/upload', label: '+ Upload' },
+  { href: '/dashboard/settings', label: 'Settings' },
 ]
 
 export default function DashboardNav({ active, email }: { active: string; email?: string }) {

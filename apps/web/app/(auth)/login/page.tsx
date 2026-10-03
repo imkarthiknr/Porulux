@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { signIn, signUp } from '@/app/actions'
+import { rememberPendingKey, saveAIKey, savePendingKeyIfAny } from '@/lib/api'
 import { safeNext } from '@/lib/redirect'
 
 type Mode = 'signin' | 'signup' | 'forgot'
@@ -13,6 +14,8 @@ export default function LoginPage() {
   const [mode, setMode] = useState<Mode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [aiProvider, setAiProvider] = useState<'gemini' | 'anthropic'>('gemini')
+  const [aiKey, setAiKey] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -65,17 +68,39 @@ export default function LoginPage() {
     }
 
     if (mode === 'signup') {
+      if (aiKey.trim().length < 20) {
+        setError('Enter your Gemini or Claude API key. Document extraction runs on your own key.')
+        setLoading(false)
+        return
+      }
       const result = await signUp(email, password, window.location.origin)
-      if (result?.error) setError(result.error)
-      else if (result?.notice) setSuccess(result.notice)
-      else if (result?.ok) { goToApp(); return }
+      if (result?.error) {
+        setError(result.error)
+      } else if (result?.notice) {
+        // Email confirmation pending: no session yet, so park the key for the first sign-in in this tab.
+        rememberPendingKey(aiProvider, aiKey.trim())
+        setSuccess(result.notice + ' Your API key will be verified and saved when you first sign in; if you confirm in another browser, add it under Settings.')
+      } else if (result?.ok) {
+        try {
+          await saveAIKey(aiProvider, aiKey.trim())
+        } catch (e) {
+          // Account exists either way; send them to Settings to fix the key.
+          window.location.assign('/dashboard/settings')
+          return
+        }
+        goToApp()
+        return
+      }
       setLoading(false)
       return
     }
 
     const result = await signIn(email, password)
     if (result?.error) { setError(result.error); setLoading(false) }
-    else goToApp()
+    else {
+      await savePendingKeyIfAny()
+      goToApp()
+    }
   }
 
   const title = mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Reset password'
@@ -147,12 +172,42 @@ export default function LoginPage() {
               </div>
             )}
 
+            {mode === 'signup' && (
+              <div className="space-y-3 rounded-lg bg-slate-50 border border-slate-200 p-3">
+                <p className="text-xs text-slate-600">
+                  Porulux reads payslips and statements with <strong>your own</strong> AI key (verified, then stored encrypted).
+                </p>
+                <div className="flex gap-2">
+                  {([['gemini', 'Gemini'], ['anthropic', 'Claude']] as const).map(([v, label]) => (
+                    <button
+                      type="button" key={v} onClick={() => setAiProvider(v)}
+                      className={`px-3 py-1 rounded-md text-xs font-medium ${aiProvider === v ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="password" value={aiKey} onChange={(e) => setAiKey(e.target.value)} required autoComplete="off"
+                  placeholder={aiProvider === 'gemini' ? 'Gemini API key (AIza…)' : 'Claude API key (sk-ant-…)'}
+                  aria-label="AI provider API key"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                />
+                <a
+                  href={aiProvider === 'gemini' ? 'https://aistudio.google.com/apikey' : 'https://console.anthropic.com/settings/keys'}
+                  target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline"
+                >
+                  Where do I get a key? ↗
+                </a>
+              </div>
+            )}
+
             {error && <p className="text-sm text-red-600">{error}</p>}
             {success && <p className="text-sm text-green-600">{success}</p>}
 
             <button
               type="submit"
-              disabled={loading || !email || (mode !== 'forgot' && !password)}
+              disabled={loading || !email || (mode !== 'forgot' && !password) || (mode === 'signup' && aiKey.trim().length < 20)}
               className="w-full py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Please wait…' : btnLabel}

@@ -17,6 +17,7 @@ class LoanCreate(BaseModel):
     interest_rate: Optional[float] = Field(None, ge=0, le=100)
     tenure_months: Optional[int] = Field(None, ge=0)
     start_date: Optional[date] = None
+    principal_amount: Optional[float] = Field(None, ge=0)  # original loan amount
 
 
 class LoanUpdate(BaseModel):
@@ -27,6 +28,7 @@ class LoanUpdate(BaseModel):
     interest_rate: Optional[float] = Field(None, ge=0, le=100)
     tenure_months: Optional[int] = Field(None, ge=0)
     start_date: Optional[date] = None
+    principal_amount: Optional[float] = Field(None, ge=0)  # original loan amount
 
 
 class Loan(LoanCreate):

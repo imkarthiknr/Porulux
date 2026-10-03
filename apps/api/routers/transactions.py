@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from postgrest.exceptions import APIError
 
-from core.auth import get_current_user
+from core.auth import AuthUser, get_auth_user, get_current_user
 from core.supabase import get_supabase_client
 from schemas.transactions import (
     CategoryTotal,
@@ -20,6 +20,8 @@ from schemas.transactions import (
     TransactionUpdate,
 )
 from services import ai
+from services.ai import AIKeyError
+from services.credentials import key_rejected_error, resolve_credentials
 from services.pdf import unlock_pdf
 from services.bank_import import ImportError_, ParsedTransaction, derive_opening_balance, parse_csv, parse_date
 from services.categorizer import CATEGORIES, categorize
@@ -138,10 +140,12 @@ async def import_statement(
     bank_name: Optional[str] = Form(None),
     account_last4: Optional[str] = Form(None),
     password: Optional[str] = Form(None),
-    user_id: str = Depends(get_current_user),
+    user: AuthUser = Depends(get_auth_user),
 ):
     """Import a bank statement (CSV parsed locally; PDF/image extracted with Gemini),
-    auto-categorise, and skip rows already imported."""
+    auto-categorise, and skip rows already imported. CSV needs no AI key; PDFs/images use the
+    caller's own key (or the shared key for pre-existing accounts)."""
+    user_id = user.id
     media_type = (file.content_type or mimetypes.guess_type(file.filename or "")[0] or "").lower()
     name = (file.filename or "").lower()
     is_csv = media_type in ("text/csv", "application/vnd.ms-excel", "text/plain") or name.endswith(".csv")
@@ -161,14 +165,17 @@ async def import_statement(
     elif media_type in _AI_TYPES:
         if media_type == "application/pdf":
             content = unlock_pdf(content, password)
+        creds = await resolve_credentials(user)
         try:
-            opening, items = await ai.extract_transactions(content, media_type)
+            opening, items = await ai.extract_transactions(content, media_type, creds=creds)
             for item in items:
                 d = parse_date(str(item.get("date", "")))
                 amount = item.get("amount")
                 desc = str(item.get("description") or "").strip()
                 if d and desc and isinstance(amount, (int, float)) and amount != 0:
                     parsed.append(ParsedTransaction(d, desc, round(float(amount), 2)))
+        except AIKeyError as exc:
+            raise key_rejected_error(exc)
         except Exception:
             logger.exception("Statement extraction failed (%s, %d bytes)", media_type, len(content))
             raise HTTPException(

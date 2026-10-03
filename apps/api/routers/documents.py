@@ -7,7 +7,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from core.auth import get_current_user
 from schemas.documents import UploadResponse
-from services.ai import generate, parse_json
+from services import ai
+from services.ai import AIKeyError, Credentials, generate, parse_json
+from services.credentials import key_rejected_error, resolve_credentials
 from services.pdf import unlock_pdf
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
@@ -70,6 +72,7 @@ async def upload_document(
     file: UploadFile = File(...),
     doc_type: str = Form(default="auto"),
     password: str | None = Form(default=None),
+    creds: Credentials = Depends(resolve_credentials),
     user_id: str = Depends(get_current_user),
 ) -> UploadResponse:
     media_type = (file.content_type or mimetypes.guess_type(file.filename or "")[0] or "").lower()
@@ -90,15 +93,18 @@ async def upload_document(
         content = unlock_pdf(content, password)
     resolved = doc_type if doc_type in EXTRACTION_PROMPTS else "auto"
 
-    # Step 1: Auto-detect document type when not specified
-    if resolved == "auto":
-        detected = await generate(content, media_type, AUTO_DETECT_PROMPT, max_tokens=20, json_output=False)
-        resolved = detected.strip().lower()
-        if resolved not in EXTRACTION_PROMPTS:
-            return UploadResponse(doc_type="unknown", data={}, confidence="low")
+    try:
+        # Step 1: Auto-detect document type when not specified
+        if resolved == "auto":
+            detected = await generate(content, media_type, AUTO_DETECT_PROMPT, creds=creds, max_tokens=20, json_output=False)
+            resolved = detected.strip().lower()
+            if resolved not in EXTRACTION_PROMPTS:
+                return UploadResponse(doc_type="unknown", data={}, confidence="low")
 
-    # Step 2: Extract structured data
-    raw = await generate(content, media_type, EXTRACTION_PROMPTS[resolved], max_tokens=8192)
+        # Step 2: Extract structured data
+        raw = await generate(content, media_type, EXTRACTION_PROMPTS[resolved], creds=creds, max_tokens=8192)
+    except AIKeyError as exc:
+        raise key_rejected_error(exc)
 
     try:
         data = parse_json(raw)

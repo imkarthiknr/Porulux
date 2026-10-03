@@ -185,6 +185,9 @@ export interface Loan {
   outstanding_amount: number
   emi_amount?: number | null
   interest_rate?: number | null
+  tenure_months?: number | null
+  start_date?: string | null
+  principal_amount?: number | null
 }
 
 export interface EpfNps {
@@ -280,3 +283,158 @@ export const deleteSalary = (id: string) => apiFetch<void>(`/api/v1/salary/${id}
 // The API prefixes password problems with these codes (422).
 export const isPasswordError = (msg: string) => /^PASSWORD_(REQUIRED|INCORRECT)/.test(msg)
 export const cleanPasswordMessage = (msg: string) => msg.replace(/^PASSWORD_[A-Z]+:\s*/, '')
+
+// ── AI key (bring your own) ────────────────────────────────────────────────────
+
+export interface AISettings {
+  mode: 'own' | 'shared' | 'none'
+  provider?: 'gemini' | 'anthropic' | null
+  key_last4?: string | null
+}
+
+export const getAISettings = () => apiFetch<AISettings>('/api/v1/settings/ai')
+export const saveAIKey = (provider: 'gemini' | 'anthropic', apiKey: string) =>
+  apiFetch<AISettings>('/api/v1/settings/ai-key', {
+    method: 'PUT',
+    body: JSON.stringify({ provider, api_key: apiKey }),
+  })
+export const deleteAIKey = () => apiFetch<void>('/api/v1/settings/ai-key', { method: 'DELETE' })
+
+// The API prefixes AI-key problems with these codes (402).
+export const isKeyError = (msg: string) => /^AI_KEY_(REQUIRED|INVALID)/.test(msg)
+export const cleanKeyMessage = (msg: string) => msg.replace(/^AI_KEY_[A-Z]+:\s*/, '')
+
+// A key typed on the sign-up form is parked here until the user has a session to save it with.
+const PENDING_KEY = 'porulux.pendingAIKey'
+export function rememberPendingKey(provider: 'gemini' | 'anthropic', apiKey: string) {
+  try { sessionStorage.setItem(PENDING_KEY, JSON.stringify({ provider, apiKey })) } catch {}
+}
+export async function savePendingKeyIfAny(): Promise<boolean> {
+  try {
+    const raw = sessionStorage.getItem(PENDING_KEY)
+    if (!raw) return false
+    const { provider, apiKey } = JSON.parse(raw) as { provider: 'gemini' | 'anthropic'; apiKey: string }
+    await saveAIKey(provider, apiKey)
+    sessionStorage.removeItem(PENDING_KEY)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// ── Generic edit + salary / transaction writes ─────────────────────────────────
+
+export const updateItem = <T>(r: Resource, id: string, body: Record<string, unknown>) =>
+  apiFetch<T>(`/api/v1/${r}/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+
+export const createSalary = (body: Record<string, unknown>) =>
+  apiFetch<SalaryRecord>('/api/v1/salary/', { method: 'POST', body: JSON.stringify(body) })
+export const updateSalary = (id: string, body: Record<string, unknown>) =>
+  apiFetch<SalaryRecord>(`/api/v1/salary/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+
+export const updateTransaction = (id: string, body: Record<string, unknown>) =>
+  apiFetch<Transaction>(`/api/v1/transactions/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+
+// ── Insights ───────────────────────────────────────────────────────────────────
+
+export interface TrendMonth {
+  month: string
+  income: number
+  expenses: number
+  net: number
+  categories: Record<string, number>
+}
+export interface SpendTrend {
+  months: TrendMonth[]
+  top_categories: string[]
+  average_monthly_spend: number
+}
+export const getSpendTrend = (months = 6) => apiFetch<SpendTrend>(`/api/v1/transactions/trend?months=${months}`)
+
+export interface RecurringItem {
+  name: string
+  direction: 'expense' | 'income'
+  frequency: 'monthly' | 'quarterly'
+  typical_amount: number
+  monthly_cost: number
+  occurrences: number
+  last_date: string
+  next_expected: string
+  variable: boolean
+}
+export const getRecurring = () =>
+  apiFetch<{ items: RecurringItem[]; monthly_commitments: number }>('/api/v1/transactions/recurring')
+
+export interface HoldingReturn {
+  holding_id: string
+  symbol: string
+  name: string
+  holding_type: string
+  units: number
+  invested: number | null
+  current_value: number | null
+  gain: number | null
+  absolute_return_pct: number | null
+  xirr_pct: number | null
+  lots: number
+}
+export interface InvestmentReturns {
+  holdings: HoldingReturn[]
+  portfolio: {
+    invested: number
+    current_value: number
+    gain: number
+    absolute_return_pct: number | null
+    xirr_pct: number | null
+  }
+}
+export const getInvestmentReturns = () => apiFetch<InvestmentReturns>('/api/v1/investments/returns')
+
+export interface Lot {
+  id: string
+  lot_date: string
+  lot_type: 'BUY' | 'SELL'
+  units: number
+  price: number
+}
+export const listLots = (holdingId: string) => apiFetch<Lot[]>(`/api/v1/holdings/${holdingId}/lots`)
+export const addLot = (holdingId: string, body: { lot_date: string; lot_type: 'BUY' | 'SELL'; units: number; price: number }) =>
+  apiFetch<Lot>(`/api/v1/holdings/${holdingId}/lots`, { method: 'POST', body: JSON.stringify(body) })
+export const deleteLot = (id: string) => apiFetch<void>(`/api/v1/lots/${id}`, { method: 'DELETE' })
+
+export interface LoanTax {
+  financial_year: string
+  interest: number
+  principal: number
+  emis: number
+  deduction_24b: number
+  deduction_80c_principal: number
+}
+export interface LoanTracker {
+  loan: Loan & { principal_amount?: number | null; tenure_months?: number | null; start_date?: string | null }
+  summary: {
+    original_principal: number
+    emi: number
+    emis_paid: number
+    emis_remaining: number
+    interest_paid_to_date: number
+    principal_paid_to_date: number
+    outstanding_principal: number
+    total_interest: number
+    payoff_date: string | null
+    tax_by_year: LoanTax[]
+    current_financial_year: string
+  }
+  tax_applicable: boolean
+  schedule: {
+    number: number
+    due_date: string
+    opening: number
+    interest: number
+    principal: number
+    emi: number
+    closing: number
+    paid: boolean
+  }[]
+}
+export const getLoanTracker = (id: string) => apiFetch<LoanTracker>(`/api/v1/loan-tracker/${id}`)

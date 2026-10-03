@@ -54,13 +54,16 @@ const holdingsConfig: SectionConfig<Holding> = {
 const loansConfig: SectionConfig<Loan> = {
   resource: 'loans',
   title: 'Loans & Liabilities',
-  blurb: 'Home loan, personal loan, vehicle loan, credit card dues.',
+  blurb: 'Home loan, personal loan, vehicle loan, credit card dues. Fill amount, rate, tenure and start date to unlock the EMI schedule and tax benefit on the Loans page.',
   fields: [
     { name: 'loan_type', label: 'Type', options: LOAN_TYPES, required: true },
     { name: 'lender_name', label: 'Lender' },
     { name: 'outstanding_amount', label: 'Outstanding (₹)', type: 'number', required: true },
     { name: 'emi_amount', label: 'EMI (₹)', type: 'number' },
     { name: 'interest_rate', label: 'Interest rate (%)', type: 'number' },
+    { name: 'principal_amount', label: 'Original amount (₹)', type: 'number' },
+    { name: 'tenure_months', label: 'Tenure (months)', type: 'number' },
+    { name: 'start_date', label: 'Start date', type: 'date' },
   ],
   columns: [
     { label: 'Type', render: (l) => l.loan_type.replace('_', ' ') },

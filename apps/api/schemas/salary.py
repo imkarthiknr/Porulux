@@ -22,6 +22,21 @@ class SalaryCreate(BaseModel):
     payslip_url: Optional[str] = None
 
 
+class SalaryUpdate(BaseModel):
+    month: Optional[int] = Field(None, ge=1, le=12)
+    year: Optional[int] = Field(None, ge=2000, le=2100)
+    employer_name: Optional[str] = None
+    basic: Optional[float] = None
+    hra: Optional[float] = None
+    special_allowance: Optional[float] = None
+    pf_employee: Optional[float] = None
+    pf_employer: Optional[float] = None
+    income_tax: Optional[float] = None
+    professional_tax: Optional[float] = None
+    gross_pay: Optional[float] = None
+    net_pay: Optional[float] = None
+
+
 class SalaryRecord(SalaryCreate):
     id: UUID
     user_id: UUID
