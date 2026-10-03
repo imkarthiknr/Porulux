@@ -4,8 +4,10 @@ load_dotenv()
 
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from services.ai import PROVIDER_LABELS, AIKeyError, AIQuotaError
 from routers import cards, documents, holdings_import, insights, networth, profile, salary, settings, transactions
 from routers.bank_accounts import accounts_crud
 from routers.bank_accounts import router as bank_accounts_router
@@ -43,6 +45,35 @@ app.add_middleware(
 app.include_router(salary.router)
 app.include_router(networth.router)
 app.include_router(documents.router)
+def _wait_text(seconds: int | None) -> str:
+    if not seconds:
+        return "a while"
+    h, m = divmod(seconds // 60, 60)
+    return f"about {h}h {m}m" if h else f"about {max(m, 1)} min"
+
+
+@app.exception_handler(AIQuotaError)
+async def ai_quota_handler(_: Request, exc: AIQuotaError):
+    who = PROVIDER_LABELS.get(exc.provider, exc.provider)
+    if exc.shared:
+        detail = (
+            f"AI_QUOTA: The shared {who} allowance for today is used up (it resets in {_wait_text(exc.retry_seconds)}). "
+            "To keep going now, add your own free key in Settings."
+        )
+    else:
+        detail = (
+            f"AI_QUOTA: Your {who} key has hit its rate or daily limit (resets in {_wait_text(exc.retry_seconds)}). "
+            "Wait, or check the plan and billing for that key."
+        )
+    return JSONResponse(status_code=429, content={"detail": detail})
+
+
+@app.exception_handler(AIKeyError)
+async def ai_key_handler(_: Request, exc: AIKeyError):
+    who = PROVIDER_LABELS.get(exc.provider, exc.provider)
+    return JSONResponse(status_code=402, content={"detail": f"AI_KEY_INVALID: Your saved {who} API key was rejected. Check or replace it in Settings."})
+
+
 app.include_router(profile.router)
 app.include_router(bank_accounts_router)
 app.include_router(accounts_crud)

@@ -21,7 +21,7 @@ from schemas.transactions import (
 )
 from routers.bank_accounts import own_account
 from services import ai
-from services.ai import AIKeyError
+from services.ai import AIKeyError, AIQuotaError
 from services.credentials import key_rejected_error, resolve_credentials
 from services.pdf import unlock_pdf
 from services.bank_import import ImportError_, ParsedTransaction, derive_opening_balance, parse_csv, parse_date
@@ -201,6 +201,8 @@ async def import_statement(
                     parsed.append(ParsedTransaction(d, desc, round(float(amount), 2)))
         except AIKeyError as exc:
             raise key_rejected_error(exc)
+        except AIQuotaError:
+            raise   # handled app-wide as a clear 429, not a vague 502
         except Exception:
             logger.exception("Statement extraction failed (%s, %d bytes)", media_type, len(content))
             raise HTTPException(

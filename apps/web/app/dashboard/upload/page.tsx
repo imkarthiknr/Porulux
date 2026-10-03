@@ -153,6 +153,7 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null)
   const [pdfPassword, setPdfPassword] = useState('')
   const [needsPassword, setNeedsPassword] = useState(false)
+  const [keyIssue, setKeyIssue] = useState(false)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -165,6 +166,7 @@ export default function UploadPage() {
       setSaveState('idle')
       setSaveError(null)
       setSavedMsg(null)
+      setKeyIssue(false)
       setFile(file)
 
       try {
@@ -174,6 +176,7 @@ export default function UploadPage() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Upload failed'
         setNeedsPassword(isPasswordError(msg))
+        setKeyIssue(isKeyError(msg))
         setError(isPasswordError(msg) ? cleanPasswordMessage(msg) : isKeyError(msg) ? cleanKeyMessage(msg) : msg)
         setStage('error')
       }
@@ -316,8 +319,13 @@ export default function UploadPage() {
               </div>
             </div>
             {stage === 'error' && error && (
-              <p className="mt-5 text-sm font-medium text-red-600 bg-red-50 px-4 py-2 rounded-lg inline-block">
-                {error}
+              <p className="mt-5 text-sm font-medium text-red-600 bg-red-50 px-4 py-2 rounded-lg inline-block max-w-xl">
+                {error}{' '}
+                {keyIssue && (
+                  <Link href="/dashboard/settings" onClick={(e) => e.stopPropagation()} className="underline font-semibold">
+                    Open Settings
+                  </Link>
+                )}
               </p>
             )}
           </div>

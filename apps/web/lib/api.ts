@@ -307,9 +307,10 @@ export const saveAIKey = (provider: 'gemini' | 'anthropic', apiKey: string) =>
   })
 export const deleteAIKey = () => apiFetch<void>('/api/v1/settings/ai-key', { method: 'DELETE' })
 
-// The API prefixes AI-key problems with these codes (402).
-export const isKeyError = (msg: string) => /^AI_KEY_(REQUIRED|INVALID)/.test(msg)
-export const cleanKeyMessage = (msg: string) => msg.replace(/^AI_KEY_[A-Z]+:\s*/, '')
+// The API prefixes AI problems with these codes: a missing or rejected key (402) or a used-up quota (429).
+// All of them are fixed from Settings (add or replace a key), so they share one handler in the UI.
+export const isKeyError = (msg: string) => /^AI_(KEY_(REQUIRED|INVALID)|QUOTA)/.test(msg)
+export const cleanKeyMessage = (msg: string) => msg.replace(/^AI_[A-Z_]+:\s*/, '')
 
 // A key typed on the sign-up form is parked here until the user has a session to save it with.
 const PENDING_KEY = 'porulux.pendingAIKey'

@@ -60,11 +60,15 @@ EXTRACTION_PROMPTS: dict[str, str] = {
     ),
 }
 
-AUTO_DETECT_PROMPT = (
-    "Identify this Indian financial document type. "
-    "Reply with EXACTLY one of these words and nothing else: "
-    "payslip, bank_statement, form16, cas_statement, unknown"
-)
+def _auto_prompt() -> str:
+    """One request that both identifies the document and extracts it, instead of a detect call followed by an
+    extract call. Halves AI usage per upload (and per free-tier quota)."""
+    parts = "\n\n".join(f"### If it is a {t}:\n{p}" for t, p in EXTRACTION_PROMPTS.items())
+    return (
+        "First identify this Indian financial document as one of: " + ", ".join(EXTRACTION_PROMPTS) + ". "
+        "Then follow ONLY the matching instructions below and return ONLY that JSON object, whose doc_type field "
+        'names the type. If it is none of these, return {"doc_type":"unknown"}.\n\n' + parts
+    )
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -94,15 +98,17 @@ async def upload_document(
     resolved = doc_type if doc_type in EXTRACTION_PROMPTS else "auto"
 
     try:
-        # Step 1: Auto-detect document type when not specified
         if resolved == "auto":
-            detected = await generate(content, media_type, AUTO_DETECT_PROMPT, creds=creds, max_tokens=20, json_output=False)
-            resolved = detected.strip().lower()
+            raw = await generate(content, media_type, _auto_prompt(), creds=creds, max_tokens=8192)
+            try:
+                guess = parse_json(raw)
+            except (json.JSONDecodeError, ValueError):
+                return UploadResponse(doc_type="unknown", data={}, raw_extraction=raw, confidence="low")
+            resolved = str(guess.get("doc_type", "unknown")).lower() if isinstance(guess, dict) else "unknown"
             if resolved not in EXTRACTION_PROMPTS:
                 return UploadResponse(doc_type="unknown", data={}, confidence="low")
-
-        # Step 2: Extract structured data
-        raw = await generate(content, media_type, EXTRACTION_PROMPTS[resolved], creds=creds, max_tokens=8192)
+        else:
+            raw = await generate(content, media_type, EXTRACTION_PROMPTS[resolved], creds=creds, max_tokens=8192)
     except AIKeyError as exc:
         raise key_rejected_error(exc)
 

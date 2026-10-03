@@ -13,7 +13,7 @@ from core.auth import AuthUser, get_auth_user, get_current_user
 from core.crud import make_crud_router
 from core.supabase import get_supabase_client
 from schemas.banking import CreditCard, CreditCardCreate, CreditCardUpdate
-from services.ai import AIKeyError
+from services.ai import AIKeyError, AIQuotaError
 from services.bank_import import ImportError_
 from services.card_import import ParsedStatement, extract_card_statement, parse_card_csv
 from services.cards import card_overview, upcoming_dues
@@ -161,6 +161,8 @@ async def import_card_statement(
             parsed = await extract_card_statement(content, media_type, creds=creds)
         except AIKeyError as exc:
             raise key_rejected_error(exc)
+        except AIQuotaError:
+            raise   # handled app-wide as a clear 429, not a vague 502
         except ValueError:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from core.auth import AuthUser, get_auth_user
 from core.supabase import get_supabase_client
-from services.ai import AIKeyError
+from services.ai import AIKeyError, AIQuotaError
 from services.credentials import key_rejected_error, resolve_credentials
 from services.holdings_import import (
     ParseResult, extract_holdings, guess_source, parse_tabular, reconcile,
@@ -77,6 +77,8 @@ async def preview(
             parsed = await extract_holdings(content, media_type, creds=creds)
         except AIKeyError as exc:
             raise key_rejected_error(exc)
+        except AIQuotaError:
+            raise   # handled app-wide as a clear 429, not a vague 502
         except ValueError:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Could not find a list of holdings in this document.")
         except Exception:
