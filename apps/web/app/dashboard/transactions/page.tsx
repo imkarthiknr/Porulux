@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import DashboardNav from '@/components/dashboard/DashboardNav'
 import {
+  cleanPasswordMessage, isPasswordError,
   deleteTransaction, getMonthlySummary, importStatement, listCategories, listTransactions,
   updateTransactionCategory,
   type MonthlySummary, type Transaction,
@@ -26,6 +27,9 @@ export default function TransactionsPage() {
   const [importMsg, setImportMsg] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [password, setPassword] = useState('')
+  const [needsPassword, setNeedsPassword] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -47,21 +51,38 @@ export default function TransactionsPage() {
   useEffect(() => { load() }, [load])
   useEffect(() => { listCategories().then(setCategories).catch(() => {}) }, [])
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  async function runImport(file: File, pw?: string) {
     setImporting(true)
     setImportMsg(null)
     try {
-      const r = await importStatement(file)
+      const r = await importStatement(file, undefined, pw)
       setImportMsg(`Imported ${r.inserted} of ${r.parsed} transactions (${r.duplicates_skipped} duplicates skipped).`)
+      setPendingFile(null)
+      setNeedsPassword(false)
+      setPassword('')
       await load()
     } catch (err) {
-      setImportMsg(err instanceof Error ? err.message : 'Import failed')
+      const msg = err instanceof Error ? err.message : 'Import failed'
+      if (isPasswordError(msg)) {
+        setPendingFile(file)
+        setNeedsPassword(true)
+        setImportMsg(cleanPasswordMessage(msg))
+      } else {
+        setNeedsPassword(false)
+        setImportMsg(msg)
+      }
     } finally {
       setImporting(false)
       if (fileRef.current) fileRef.current.value = ''
     }
+  }
+
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPassword('')
+    setNeedsPassword(false)
+    runImport(file)
   }
 
   async function onRecategorise(id: string, cat: string) {
@@ -111,7 +132,29 @@ export default function TransactionsPage() {
           </div>
         </div>
 
-        {importMsg && <p className="text-sm text-slate-600 bg-white border border-slate-200 rounded-lg px-4 py-2">{importMsg}</p>}
+        {importing && (
+          <p className="text-sm text-slate-600 bg-white border border-slate-200 rounded-lg px-4 py-2 flex items-center gap-2">
+            <span className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+            Reading your statement… PDFs can take up to a minute. CSV files are instant.
+          </p>
+        )}
+        {!importing && importMsg && <p className="text-sm text-slate-600 bg-white border border-slate-200 rounded-lg px-4 py-2">{importMsg}</p>}
+        {needsPassword && pendingFile && !importing && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); if (password) runImport(pendingFile, password) }}
+            className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 rounded-lg px-4 py-3"
+          >
+            <label className="text-sm text-slate-600" htmlFor="pdfpw">PDF password for {pendingFile.name}</label>
+            <input
+              id="pdfpw" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+              autoComplete="off" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+            />
+            <button type="submit" disabled={!password} className="rounded-lg bg-indigo-600 text-white text-sm font-medium px-4 py-1.5 hover:bg-indigo-700 disabled:opacity-50">
+              Unlock and import
+            </button>
+            <p className="w-full text-xs text-slate-400">The password is only used to open the file for this import and is never stored.</p>
+          </form>
+        )}
         {error && <p className="text-sm text-red-500">{error}</p>}
 
         {summary && (

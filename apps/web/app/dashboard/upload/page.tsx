@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useCallback, useRef, useState } from 'react'
 
 import { formatINR } from '@/lib/format'
-import { importStatement, savePayslip, uploadDocument, type DocType, type UploadResult } from '@/lib/api'
+import { cleanPasswordMessage, importStatement, isPasswordError, savePayslip, uploadDocument, type DocType, type UploadResult } from '@/lib/api'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -150,11 +150,13 @@ export default function UploadPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [file, setFile] = useState<File | null>(null)
+  const [pdfPassword, setPdfPassword] = useState('')
+  const [needsPassword, setNeedsPassword] = useState(false)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = useCallback(
-    async (file: File) => {
+    async (file: File, pw?: string) => {
       setStage('uploading')
       setProgress(0)
       setResult(null)
@@ -165,11 +167,13 @@ export default function UploadPage() {
       setFile(file)
 
       try {
-        const res = await uploadDocument(file, docType, (pct) => setProgress(pct))
+        const res = await uploadDocument(file, docType, (pct) => setProgress(pct), pw)
         setResult(res)
         setStage('done')
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Upload failed')
+        const msg = err instanceof Error ? err.message : 'Upload failed'
+        setNeedsPassword(isPasswordError(msg))
+        setError(isPasswordError(msg) ? cleanPasswordMessage(msg) : msg)
         setStage('error')
       }
     },
@@ -181,17 +185,17 @@ export default function UploadPage() {
       e.preventDefault()
       setDragOver(false)
       const file = e.dataTransfer.files[0]
-      if (file) handleFile(file)
+      if (file) handleFile(file, pdfPassword || undefined)
     },
-    [handleFile],
+    [handleFile, pdfPassword],
   )
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0]
-      if (file) handleFile(file)
+      if (file) handleFile(file, pdfPassword || undefined)
     },
-    [handleFile],
+    [handleFile, pdfPassword],
   )
 
   const handleSave = async () => {
@@ -205,7 +209,7 @@ export default function UploadPage() {
         setSavedMsg('Payslip saved to your salary history.')
       } else if (result.doc_type === 'bank_statement') {
         if (!file) throw new Error('Original file is no longer available. Upload it again.')
-        const r = await importStatement(file)
+        const r = await importStatement(file, undefined, pdfPassword || undefined)
         setSavedMsg(
           `Imported ${r.inserted} of ${r.parsed} transactions` +
             (r.duplicates_skipped ? ` (${r.duplicates_skipped} already existed).` : '.'),
@@ -226,6 +230,8 @@ export default function UploadPage() {
     setSaveError(null)
     setSavedMsg(null)
     setFile(null)
+    setNeedsPassword(false)
+    setPdfPassword('')
     setProgress(0)
     if (inputRef.current) inputRef.current.value = ''
   }
@@ -310,6 +316,27 @@ export default function UploadPage() {
               <p className="mt-5 text-sm font-medium text-red-600 bg-red-50 px-4 py-2 rounded-lg inline-block">
                 {error}
               </p>
+            )}
+          </div>
+        )}
+
+        {/* PDF password: only needed for protected statements; never stored */}
+        {(stage === 'idle' || stage === 'error') && (
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <label htmlFor="pdfpw" className="text-slate-600">PDF password (if protected)</label>
+            <input
+              id="pdfpw" type="password" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)}
+              autoComplete="off" placeholder="optional"
+              className={`rounded-lg border px-3 py-1.5 text-sm ${needsPassword ? 'border-red-400' : 'border-slate-300'}`}
+            />
+            {needsPassword && file && (
+              <button
+                onClick={() => handleFile(file, pdfPassword)}
+                disabled={!pdfPassword}
+                className="rounded-lg bg-indigo-600 text-white font-medium px-4 py-1.5 hover:bg-indigo-700 disabled:opacity-50"
+              >
+                Retry
+              </button>
             )}
           </div>
         )}

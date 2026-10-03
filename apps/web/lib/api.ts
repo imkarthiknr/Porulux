@@ -56,6 +56,7 @@ export function uploadDocument(
   file: File,
   docType: DocType,
   onProgress?: (pct: number) => void,
+  password?: string,
 ): Promise<UploadResult> {
   return new Promise(async (resolve, reject) => {
     let token: string
@@ -69,6 +70,7 @@ export function uploadDocument(
     const form = new FormData()
     form.append('file', file)
     form.append('doc_type', docType)
+    if (password) form.append('password', password)
 
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `${API_BASE}/api/v1/documents/upload`)
@@ -239,11 +241,12 @@ export const updateTransactionCategory = (id: string, category: string) =>
 export const deleteTransaction = (id: string) =>
   apiFetch<void>(`/api/v1/transactions/${id}`, { method: 'DELETE' })
 
-export async function importStatement(file: File, bankName?: string): Promise<ImportResult> {
+export async function importStatement(file: File, bankName?: string, password?: string): Promise<ImportResult> {
   const token = await getToken()
   const form = new FormData()
   form.append('file', file)
   if (bankName) form.append('bank_name', bankName)
+  if (password) form.append('password', password)
   const res = await fetch(`${API_BASE}/api/v1/transactions/import`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
@@ -273,3 +276,7 @@ export interface SalaryRecord {
 
 export const listSalary = () => apiFetch<SalaryRecord[]>('/api/v1/salary/')
 export const deleteSalary = (id: string) => apiFetch<void>(`/api/v1/salary/${id}`, { method: 'DELETE' })
+
+// The API prefixes password problems with these codes (422).
+export const isPasswordError = (msg: string) => /^PASSWORD_(REQUIRED|INCORRECT)/.test(msg)
+export const cleanPasswordMessage = (msg: string) => msg.replace(/^PASSWORD_[A-Z]+:\s*/, '')

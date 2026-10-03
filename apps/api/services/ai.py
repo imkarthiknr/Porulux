@@ -14,7 +14,10 @@ _client: genai.Client | None = None
 def get_client() -> genai.Client:
     global _client
     if _client is None:
-        _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        _client = genai.Client(
+            api_key=os.environ["GEMINI_API_KEY"],
+            http_options=types.HttpOptions(timeout=240_000),  # ms; fail instead of hanging forever
+        )
     return _client
 
 
@@ -30,6 +33,8 @@ async def generate(data: bytes, media_type: str, prompt: str, *, max_tokens: int
         max_output_tokens=max_tokens,
         temperature=0,
         response_mime_type="application/json" if json_output else "text/plain",
+        # Extraction doesn't need reasoning; 2.5-flash "thinks" by default, which is slow and costly.
+        thinking_config=types.ThinkingConfig(thinking_budget=0) if "flash" in MODEL else None,
     )
     res = await get_client().aio.models.generate_content(
         model=MODEL, contents=[_part(data, media_type), prompt], config=config

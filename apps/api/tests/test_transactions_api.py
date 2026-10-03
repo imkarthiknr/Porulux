@@ -116,3 +116,18 @@ def test_no_opening_balance_when_user_already_has_transactions(api):
     fake = FakeClient([{"id": "x", "transaction_date": "2024-03-01", "description": "old", "amount": 5.0}])
     api(fake).post("/api/v1/transactions/import", files={"file": ("s.csv", CSV_WITH_BALANCE, "text/csv")})
     assert not [r for r in fake.store if r["category"] == "Opening Balance"]
+
+
+def test_protected_pdf_asks_for_password_instead_of_calling_ai(api, monkeypatch):
+    import io
+    from pypdf import PdfWriter
+
+    w = PdfWriter(); w.add_blank_page(100, 100); w.encrypt("pw")
+    buf = io.BytesIO(); w.write(buf)
+
+    async def boom(*a, **k):
+        raise AssertionError("AI must not be called for a locked PDF")
+
+    monkeypatch.setattr(transactions.ai, "extract_transactions", boom)
+    res = api(FakeClient()).post("/api/v1/transactions/import", files={"file": ("s.pdf", buf.getvalue(), "application/pdf")})
+    assert res.status_code == 422 and res.json()["detail"].startswith("PASSWORD_REQUIRED")

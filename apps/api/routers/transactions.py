@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import mimetypes
 from collections import defaultdict
 from datetime import date
@@ -19,9 +20,11 @@ from schemas.transactions import (
     TransactionUpdate,
 )
 from services import ai
+from services.pdf import unlock_pdf
 from services.bank_import import ImportError_, ParsedTransaction, derive_opening_balance, parse_csv, parse_date
 from services.categorizer import CATEGORIES, categorize
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 
 _TABLE = "bank_transactions"
@@ -134,6 +137,7 @@ async def import_statement(
     file: UploadFile = File(...),
     bank_name: Optional[str] = Form(None),
     account_last4: Optional[str] = Form(None),
+    password: Optional[str] = Form(None),
     user_id: str = Depends(get_current_user),
 ):
     """Import a bank statement (CSV parsed locally; PDF/image extracted with Gemini),
@@ -155,6 +159,8 @@ async def import_statement(
         except ImportError_ as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     elif media_type in _AI_TYPES:
+        if media_type == "application/pdf":
+            content = unlock_pdf(content, password)
         try:
             opening, items = await ai.extract_transactions(content, media_type)
             for item in items:
@@ -164,7 +170,11 @@ async def import_statement(
                 if d and desc and isinstance(amount, (int, float)) and amount != 0:
                     parsed.append(ParsedTransaction(d, desc, round(float(amount), 2)))
         except Exception:
-            raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail="Could not extract transactions from this document.")
+            logger.exception("Statement extraction failed (%s, %d bytes)", media_type, len(content))
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                detail="The AI could not read this statement. Try a CSV export from your bank, or a smaller date range.",
+            )
         if not parsed:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No transactions found in the document.")
     else:

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from core.auth import get_current_user
 from schemas.documents import UploadResponse
 from services.ai import generate, parse_json
+from services.pdf import unlock_pdf
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
@@ -68,6 +69,7 @@ AUTO_DETECT_PROMPT = (
 async def upload_document(
     file: UploadFile = File(...),
     doc_type: str = Form(default="auto"),
+    password: str | None = Form(default=None),
     user_id: str = Depends(get_current_user),
 ) -> UploadResponse:
     media_type = (file.content_type or mimetypes.guess_type(file.filename or "")[0] or "").lower()
@@ -84,6 +86,8 @@ async def upload_document(
     if len(content) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File exceeds 20 MB limit.")
 
+    if media_type == "application/pdf":
+        content = unlock_pdf(content, password)
     resolved = doc_type if doc_type in EXTRACTION_PROMPTS else "auto"
 
     # Step 1: Auto-detect document type when not specified
