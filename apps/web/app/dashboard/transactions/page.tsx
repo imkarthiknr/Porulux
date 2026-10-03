@@ -8,9 +8,9 @@ import RecurringPayments from '@/components/dashboard/RecurringPayments'
 import SpendTrendChart from '@/components/dashboard/SpendTrendChart'
 import {
   cleanKeyMessage, cleanPasswordMessage, isKeyError, isPasswordError,
-  createTransaction, deleteTransaction, getMonthlySummary, importStatement, listCategories, listTransactions,
+  createTransaction, deleteTransaction, listBankAccounts, getMonthlySummary, importStatement, listCategories, listTransactions,
   updateTransaction, updateTransactionCategory,
-  type MonthlySummary, type Transaction,
+  type BankAccount, type MonthlySummary, type Transaction,
 } from '@/lib/api'
 import { formatINR } from '@/lib/format'
 
@@ -32,8 +32,10 @@ export default function TransactionsPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [accounts, setAccounts] = useState<BankAccount[]>([])
+  const [accountId, setAccountId] = useState('')   // '' = all, 'unassigned', or an account id
   const [editing, setEditing] = useState<string | 'new' | null>(null)
-  const [form, setForm] = useState({ date: '', description: '', amount: '', kind: 'debit', category: '' })
+  const [form, setForm] = useState({ date: '', description: '', amount: '', kind: 'debit', category: '', account_id: '' })
   const [saving, setSaving] = useState(false)
   const [password, setPassword] = useState('')
   const [needsPassword, setNeedsPassword] = useState(false)
@@ -42,8 +44,8 @@ export default function TransactionsPage() {
     setLoading(true)
     try {
       const [t, s] = await Promise.all([
-        listTransactions(month, category || undefined),
-        getMonthlySummary(month),
+        listTransactions(month, category || undefined, accountId || undefined),
+        getMonthlySummary(month, accountId || undefined),
       ])
       setTxns(t)
       setSummary(s)
@@ -54,16 +56,21 @@ export default function TransactionsPage() {
     } finally {
       setLoading(false)
     }
-  }, [month, category])
+  }, [month, category, accountId])
 
   useEffect(() => { load() }, [load])
   useEffect(() => { listCategories().then(setCategories).catch(() => {}) }, [])
+  useEffect(() => {
+    listBankAccounts().then(setAccounts).catch(() => {})
+    const fromUrl = new URLSearchParams(window.location.search).get('account')
+    if (fromUrl) setAccountId(fromUrl)
+  }, [])
 
   async function runImport(file: File, pw?: string) {
     setImporting(true)
     setImportMsg(null)
     try {
-      const r = await importStatement(file, undefined, pw)
+      const r = await importStatement(file, undefined, pw, accountId && accountId !== 'unassigned' ? accountId : undefined)
       setImportMsg(`Imported ${r.inserted} of ${r.parsed} transactions (${r.duplicates_skipped} duplicates skipped).`)
       setPendingFile(null)
       setNeedsPassword(false)
@@ -95,14 +102,14 @@ export default function TransactionsPage() {
 
   function startNew() {
     const today = new Date().toISOString().slice(0, 10)
-    setForm({ date: today.startsWith(month) ? today : `${month}-01`, description: '', amount: '', kind: 'debit', category: '' })
+    setForm({ date: today.startsWith(month) ? today : `${month}-01`, description: '', amount: '', kind: 'debit', category: '', account_id: accountId && accountId !== 'unassigned' ? accountId : '' })
     setEditing('new')
   }
 
   function startEdit(t: Transaction) {
     setForm({
       date: t.transaction_date, description: t.description, amount: String(Math.abs(t.amount)),
-      kind: t.amount < 0 ? 'debit' : 'credit', category: t.category ?? '',
+      kind: t.amount < 0 ? 'debit' : 'credit', category: t.category ?? '', account_id: t.account_id ?? '',
     })
     setEditing(t.id)
   }
@@ -116,6 +123,7 @@ export default function TransactionsPage() {
       amount: form.kind === 'debit' ? -magnitude : magnitude,
     }
     if (form.category) body.category = form.category
+    if (form.account_id) body.account_id = form.account_id
     setSaving(true)
     try {
       if (editing === 'new') await createTransaction(body)
@@ -165,6 +173,14 @@ export default function TransactionsPage() {
               onChange={(e) => e.target.value && setMonth(e.target.value)}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
+            <select
+              value={accountId} onChange={(e) => setAccountId(e.target.value)} aria-label="Account"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="">All accounts</option>
+              {accounts.map((a) => <option key={a.id} value={a.id}>{a.bank_name} ····{a.last4}</option>)}
+              <option value="unassigned">Unassigned</option>
+            </select>
             <input ref={fileRef} type="file" accept=".csv,.pdf,image/*" onChange={onFile} className="hidden" />
             <button
               onClick={startNew}
@@ -263,6 +279,14 @@ export default function TransactionsPage() {
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
               </label>
               <label className="text-xs text-slate-600 space-y-1">
+                <span>Account</span>
+                <select value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                  <option value="">{editing === 'new' ? 'Not linked' : 'Keep current'}</option>
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.bank_name} ····{a.last4}</option>)}
+                </select>
+              </label>
+              <label className="text-xs text-slate-600 space-y-1">
                 <span>Category</span>
                 <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
@@ -280,8 +304,8 @@ export default function TransactionsPage() {
           </form>
         )}
 
-        <SpendTrendChart refreshKey={refreshKey} />
-        <RecurringPayments refreshKey={refreshKey} />
+        <SpendTrendChart refreshKey={refreshKey} accountId={accountId || undefined} />
+        <RecurringPayments refreshKey={refreshKey} accountId={accountId || undefined} />
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
@@ -311,7 +335,10 @@ export default function TransactionsPage() {
                   {txns.map((t) => (
                     <tr key={t.id} className="border-b border-slate-50">
                       <td className="py-2 pr-4 whitespace-nowrap text-slate-600">{t.transaction_date}</td>
-                      <td className="py-2 pr-4 text-slate-800 max-w-xs truncate">{t.description}</td>
+                      <td className="py-2 pr-4 text-slate-800 max-w-xs">
+                        <p className="truncate">{t.description}</p>
+                        {t.account_last4 && <p className="text-[11px] text-slate-400">{t.bank_name} ····{t.account_last4}</p>}
+                      </td>
                       <td className="py-2 pr-4">
                         <select
                           value={t.category ?? 'Other'}

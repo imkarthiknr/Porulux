@@ -10,6 +10,7 @@ class NetWorthBreakdown(BaseModel):
     epf_nps: float
     bank_balance: float
     loans: float
+    credit_cards: float = 0
 
 
 class NetWorthSnapshot(BaseModel):
@@ -36,5 +37,6 @@ class NetWorthHistoryEntry(BaseModel):
                 "epf_nps": data.pop("epf_nps", 0),
                 "bank_balance": data.pop("bank_balance", 0),
                 "loans": data.pop("loans", 0),
+                "credit_cards": data.pop("credit_cards", 0),
             }
         return data

@@ -17,6 +17,7 @@ interface Breakdown {
   epf_nps: number
   bank_balance: number
   loans: number
+  credit_cards?: number
 }
 
 interface Snapshot {
@@ -24,6 +25,15 @@ interface Snapshot {
   total_liabilities: number
   net_worth: number
   breakdown: Breakdown
+}
+
+interface CardDueItem {
+  card_id: string
+  label: string
+  date: string
+  days_left: number
+  overdue: boolean
+  amount_due: number
 }
 
 interface SalaryRow {
@@ -98,6 +108,8 @@ export default async function DashboardPage() {
   const history = await fetchJSON<HistoryEntry[]>('/api/v1/networth/history', session.access_token)
   const salary = await fetchJSON<SalaryRow[]>('/api/v1/salary', session.access_token)
   const latestSalary = salary?.[0]
+  const cards = await fetchJSON<{ upcoming_dues: CardDueItem[] }>('/api/v1/credit-cards/overview', session.access_token)
+  const dues = (cards?.upcoming_dues ?? []).filter((d) => d.overdue || d.days_left <= 15)
 
   const emptyBreakdown: Breakdown = { investments: 0, epf_nps: 0, bank_balance: 0, loans: 0 }
   const safeSnapshot: Snapshot = snapshot ?? {
@@ -131,6 +143,25 @@ export default async function DashboardPage() {
           <SummaryCard label="Net Worth" value={safeSnapshot.net_worth} variant="networth" />
           <SummaryCard label="Monthly Change" value={monthlyChange} variant="change" changePct={monthlyChangePct} />
         </div>
+
+        {dues.length > 0 && (
+          <div className="space-y-2">
+            {dues.map((d) => (
+              <Link
+                key={d.card_id} href="/dashboard/cards"
+                className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-sm ${
+                  d.overdue ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-900'
+                }`}
+              >
+                <span>
+                  <strong>{d.label}</strong>{' · '}
+                  {d.overdue ? `payment overdue by ${Math.abs(d.days_left)} day${Math.abs(d.days_left) === 1 ? '' : 's'}` : d.days_left === 0 ? 'payment due today' : `payment due in ${d.days_left} day${d.days_left === 1 ? '' : 's'}`}
+                </span>
+                <span className="font-medium">{formatINR(d.amount_due)}</span>
+              </Link>
+            ))}
+          </div>
+        )}
 
         {latestSalary && (
           <Link

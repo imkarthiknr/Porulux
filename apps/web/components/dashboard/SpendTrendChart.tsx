@@ -10,15 +10,15 @@ const PALETTE = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#06b6d4', '#94a3b8
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const label = (ym: string) => `${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(2, 4)}`
 
-export default function SpendTrendChart({ refreshKey }: { refreshKey?: number }) {
+export default function SpendTrendChart({ refreshKey, accountId }: { refreshKey?: number; accountId?: string }) {
   const [trend, setTrend] = useState<SpendTrend | null>(null)
   const [months, setMonths] = useState(6)
   const [view, setView] = useState<'flow' | 'categories'>('flow')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    getSpendTrend(months).then((t) => { setTrend(t); setError(null) }).catch((e) => setError(e instanceof Error ? e.message : 'Failed to load trend'))
-  }, [months, refreshKey])
+    getSpendTrend(months, accountId).then((t) => { setTrend(t); setError(null) }).catch((e) => setError(e instanceof Error ? e.message : 'Failed to load trend'))
+  }, [months, refreshKey, accountId])
 
   const data = trend?.months.map((m) => ({ ...m, ...m.categories, label: label(m.month) })) ?? []
   const empty = trend && trend.months.every((m) => m.income === 0 && m.expenses === 0)

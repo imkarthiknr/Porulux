@@ -19,6 +19,7 @@ from schemas.transactions import (
     TransactionCreate,
     TransactionUpdate,
 )
+from routers.bank_accounts import own_account
 from services import ai
 from services.ai import AIKeyError
 from services.credentials import key_rejected_error, resolve_credentials
@@ -45,6 +46,15 @@ def _month_bounds(month: str) -> tuple[str, str]:
     return start.isoformat(), end.isoformat()
 
 
+def _account_filter(q, account_id: Optional[str]):
+    """account_id: a UUID, or "unassigned" for rows not linked to any account."""
+    if account_id == "unassigned":
+        return q.is_("account_id", "null")
+    if account_id:
+        return q.eq("account_id", account_id)
+    return q
+
+
 @router.get("/categories", response_model=list[str])
 async def list_categories():
     return CATEGORIES
@@ -54,6 +64,7 @@ async def list_categories():
 async def list_transactions(
     month: Optional[str] = Query(None, description="YYYY-MM"),
     category: Optional[str] = None,
+    account_id: Optional[str] = None,
     limit: int = Query(200, ge=1, le=1000),
     user_id: str = Depends(get_current_user),
 ):
@@ -63,6 +74,7 @@ async def list_transactions(
         q = q.gte("transaction_date", start).lt("transaction_date", end)
     if category:
         q = q.eq("category", category)
+    q = _account_filter(q, account_id)
     return q.order("transaction_date", desc=True).order("created_at", desc=True).limit(limit).execute().data
 
 
@@ -70,6 +82,10 @@ async def list_transactions(
 async def create_transaction(payload: TransactionCreate, user_id: str = Depends(get_current_user)):
     data = payload.model_dump(exclude_none=True, mode="json")
     data["user_id"] = user_id
+    if payload.account_id:
+        acc = own_account(user_id, str(payload.account_id))
+        data.setdefault("bank_name", acc["bank_name"])
+        data.setdefault("account_last4", acc["last4"])
     data.setdefault("category", categorize(payload.description, payload.amount))
     try:
         res = get_supabase_client().table(_TABLE).insert(data).execute()
@@ -85,6 +101,9 @@ async def update_transaction(
     data = payload.model_dump(exclude_unset=True, mode="json")
     if not data:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+    if data.get("account_id"):
+        acc = own_account(user_id, data["account_id"])
+        data["bank_name"], data["account_last4"] = acc["bank_name"], acc["last4"]
     try:
         res = (
             get_supabase_client().table(_TABLE).update(data)
@@ -107,14 +126,15 @@ async def delete_transaction(txn_id: str, user_id: str = Depends(get_current_use
 @router.get("/summary", response_model=MonthlySummary)
 async def monthly_summary(
     month: str = Query(..., description="YYYY-MM"),
+    account_id: Optional[str] = None,
     user_id: str = Depends(get_current_user),
 ):
     start, end = _month_bounds(month)
-    rows = (
+    q = (
         get_supabase_client().table(_TABLE).select("amount,category")
         .eq("user_id", user_id).gte("transaction_date", start).lt("transaction_date", end)
-        .limit(10000).execute()
-    ).data
+    )
+    rows = _account_filter(q, account_id).limit(10000).execute().data
     rows = [r for r in rows if r["category"] != OPENING_BALANCE]
     income = sum(r["amount"] for r in rows if r["amount"] > 0)
     expenses = sum(-r["amount"] for r in rows if r["amount"] < 0)
@@ -140,12 +160,17 @@ async def import_statement(
     bank_name: Optional[str] = Form(None),
     account_last4: Optional[str] = Form(None),
     password: Optional[str] = Form(None),
+    account_id: Optional[str] = Form(None),
     user: AuthUser = Depends(get_auth_user),
 ):
     """Import a bank statement (CSV parsed locally; PDF/image extracted with Gemini),
     auto-categorise, and skip rows already imported. CSV needs no AI key; PDFs/images use the
     caller's own key (or the shared key for pre-existing accounts)."""
     user_id = user.id
+    account = own_account(user_id, account_id) if account_id else None
+    if account:
+        bank_name = bank_name or account["bank_name"]
+        account_last4 = account_last4 or account["last4"]
     media_type = (file.content_type or mimetypes.guess_type(file.filename or "")[0] or "").lower()
     name = (file.filename or "").lower()
     is_csv = media_type in ("text/csv", "application/vnd.ms-excel", "text/plain") or name.endswith(".csv")
@@ -190,11 +215,11 @@ async def import_statement(
     client = get_supabase_client()
     lo = min(t.transaction_date for t in parsed).isoformat()
     hi = max(t.transaction_date for t in parsed).isoformat()
-    existing = (
+    existing_q = (
         client.table(_TABLE).select("transaction_date,description,amount")
         .eq("user_id", user_id).gte("transaction_date", lo).lte("transaction_date", hi)
-        .limit(10000).execute()
-    ).data
+    )
+    existing = _account_filter(existing_q, account_id or "unassigned").limit(10000).execute().data
     # Identical rows within one file are legitimate (two same-day coffees), so count
     # occurrences instead of using a set.
     seen: dict[tuple, int] = defaultdict(int)
@@ -216,11 +241,15 @@ async def import_statement(
             "category": categorize(t.description, t.amount),
             "bank_name": bank_name,
             "account_last4": account_last4,
+            "account_id": account_id,
         })
     # First import for this user: seed the balance the statement started with, so net worth's
     # bank balance matches the real account instead of just the sum of these rows.
     if opening and abs(opening) > 0.005 and rows:
-        has_any = client.table(_TABLE).select("id").eq("user_id", user_id).limit(1).execute().data
+        any_q = client.table(_TABLE).select("id").eq("user_id", user_id)
+        if account_id:  # per-account: an account's first statement seeds that account's balance
+            any_q = any_q.eq("account_id", account_id)
+        has_any = any_q.limit(1).execute().data
         if not has_any:
             rows.append({
                 "user_id": user_id,
@@ -230,6 +259,7 @@ async def import_statement(
                 "category": OPENING_BALANCE,
                 "bank_name": bank_name,
                 "account_last4": account_last4,
+                "account_id": account_id,
             })
     for i in range(0, len(rows), 500):
         client.table(_TABLE).insert(rows[i:i + 500]).execute()

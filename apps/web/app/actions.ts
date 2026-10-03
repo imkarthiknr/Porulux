@@ -49,3 +49,9 @@ export async function signUp(email: string, password: string, origin: string) {
   }
   return { ok: true as const }
 }
+
+export async function signOut() {
+  const supabase = serverSupabase()
+  await supabase.auth.signOut()
+  return { ok: true as const }
+}

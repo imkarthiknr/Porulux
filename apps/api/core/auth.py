@@ -12,6 +12,7 @@ security = HTTPBearer()
 class AuthUser:
     id: str
     created_at: datetime | None
+    email: str | None = None
 
 
 async def get_auth_user(
@@ -33,7 +34,11 @@ async def get_auth_user(
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return AuthUser(id=response.user.id, created_at=getattr(response.user, "created_at", None))
+    return AuthUser(
+        id=response.user.id,
+        created_at=getattr(response.user, "created_at", None),
+        email=getattr(response.user, "email", None),
+    )
 
 
 async def get_current_user(user: AuthUser = Depends(get_auth_user)) -> str:

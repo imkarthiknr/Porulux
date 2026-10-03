@@ -20,6 +20,7 @@ class Query:
     def update(self, row): self.op, self.payload = "update", row; return self
     def delete(self): self.op = "delete"; return self
     def eq(self, k, v): self.filters.append((k, "eq", v)); return self
+    def is_(self, k, v): self.filters.append((k, "is", v)); return self
     def gte(self, k, v): self.filters.append((k, "gte", v)); return self
     def lte(self, k, v): self.filters.append((k, "lte", v)); return self
     def lt(self, k, v): self.filters.append((k, "lt", v)); return self
@@ -30,6 +31,10 @@ class Query:
     def _match(self, row):
         for k, kind, v in self.filters:
             x = row.get(k)
+            if kind == "is":
+                if (x is None) != (v == "null"):
+                    return False
+                continue
             if x is None:
                 return False
             if kind == "eq" and x != v: return False

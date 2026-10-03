@@ -5,6 +5,7 @@ from supabase import Client
 
 from core.auth import get_current_user
 from core.supabase import get_supabase_client
+from services.cards import total_card_dues
 from schemas.networth import NetWorthBreakdown, NetWorthHistoryEntry, NetWorthSnapshot
 
 router = APIRouter(prefix="/api/v1/networth", tags=["networth"])
@@ -44,8 +45,17 @@ def _compute_snapshot(client: Client, user_id: str) -> NetWorthSnapshot:
     ).data
     loans = sum(r["outstanding_amount"] or 0 for r in loan_rows)
 
+    stmts = (
+        client.table("card_statements").select("card_id,statement_date,total_due,paid")
+        .eq("user_id", user_id).execute()
+    ).data
+    by_card: dict[str, list[dict]] = {}
+    for st in stmts:
+        by_card.setdefault(st["card_id"], []).append(st)
+    card_dues = total_card_dues(by_card)
+
     total_assets = round(investments + epf_nps + bank_balance, 2)
-    total_liabilities = round(loans, 2)
+    total_liabilities = round(loans + card_dues, 2)
 
     return NetWorthSnapshot(
         total_assets=total_assets,
@@ -56,6 +66,7 @@ def _compute_snapshot(client: Client, user_id: str) -> NetWorthSnapshot:
             epf_nps=round(epf_nps, 2),
             bank_balance=round(bank_balance, 2),
             loans=round(loans, 2),
+            credit_cards=card_dues,
         ),
     )
 
@@ -81,6 +92,7 @@ async def save_networth_snapshot(user_id: str = Depends(get_current_user)):
             "epf_nps": snapshot.breakdown.epf_nps,
             "bank_balance": snapshot.breakdown.bank_balance,
             "loans": snapshot.breakdown.loans,
+            "credit_cards": snapshot.breakdown.credit_cards,
         },
         on_conflict="user_id,snapshot_date",
     ).execute()

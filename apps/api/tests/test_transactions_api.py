@@ -20,6 +20,7 @@ class FakeQuery:
 
     def select(self, *_): return self
     def eq(self, *_): return self
+    def is_(self, *_): return self
     def gte(self, *_): return self
     def lte(self, *_): return self
     def limit(self, *_): return self

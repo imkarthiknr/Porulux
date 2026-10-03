@@ -24,23 +24,31 @@ def _first_of_month(d: date, back: int = 0) -> date:
     return date(idx // 12, idx % 12 + 1, 1)
 
 
-def _fetch_txns(user_id: str, since: date) -> list[dict]:
-    return (
+def _fetch_txns(user_id: str, since: date, account_id: Optional[str] = None) -> list[dict]:
+    q = (
         get_supabase_client().table("bank_transactions")
         .select("transaction_date,description,amount,category")
         .eq("user_id", user_id).gte("transaction_date", since.isoformat())
-        .limit(10000).execute()
-    ).data
+    )
+    if account_id == "unassigned":
+        q = q.is_("account_id", "null")
+    elif account_id:
+        q = q.eq("account_id", account_id)
+    return q.limit(10000).execute().data
 
 
 # ── Spend trend ───────────────────────────────────────────────────────────────
 
 @router.get("/transactions/trend")
-async def spend_trend(months: int = Query(6, ge=2, le=24), user_id: str = Depends(get_current_user)):
+async def spend_trend(
+    months: int = Query(6, ge=2, le=24),
+    account_id: Optional[str] = None,
+    user_id: str = Depends(get_current_user),
+):
     """Income vs expenses per month plus per-category spend, for the last `months` months."""
     today = date.today()
     start = _first_of_month(today, months - 1)
-    rows = [r for r in _fetch_txns(user_id, start) if r["category"] != OPENING_BALANCE]
+    rows = [r for r in _fetch_txns(user_id, start, account_id) if r["category"] != OPENING_BALANCE]
 
     buckets = {_first_of_month(today, months - 1 - i).strftime("%Y-%m"): {"income": 0.0, "expenses": 0.0, "cats": defaultdict(float)} for i in range(months)}
     for r in rows:
@@ -80,11 +88,11 @@ async def spend_trend(months: int = Query(6, ge=2, le=24), user_id: str = Depend
 # ── Recurring payments ────────────────────────────────────────────────────────
 
 @router.get("/transactions/recurring")
-async def recurring_payments(user_id: str = Depends(get_current_user)):
+async def recurring_payments(account_id: Optional[str] = None, user_id: str = Depends(get_current_user)):
     since = _first_of_month(date.today(), 12)
     txns = [
         (date.fromisoformat(r["transaction_date"]), r["description"], float(r["amount"]))
-        for r in _fetch_txns(user_id, since) if r["category"] != OPENING_BALANCE
+        for r in _fetch_txns(user_id, since, account_id) if r["category"] != OPENING_BALANCE
     ]
     items = detect_recurring(txns)
     expenses = [i for i in items if i.direction == "expense"]

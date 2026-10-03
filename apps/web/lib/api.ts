@@ -214,6 +214,8 @@ export interface Transaction {
   amount: number
   category?: string | null
   bank_name?: string | null
+  account_last4?: string | null
+  account_id?: string | null
 }
 
 export interface MonthlySummary {
@@ -230,12 +232,14 @@ export interface ImportResult {
   duplicates_skipped: number
 }
 
-export const listTransactions = (month: string, category?: string) =>
+const acct = (accountId?: string) => (accountId ? `&account_id=${encodeURIComponent(accountId)}` : '')
+
+export const listTransactions = (month: string, category?: string, accountId?: string) =>
   apiFetch<Transaction[]>(
-    `/api/v1/transactions/?month=${month}${category ? `&category=${encodeURIComponent(category)}` : ''}`,
+    `/api/v1/transactions/?month=${month}${category ? `&category=${encodeURIComponent(category)}` : ''}${acct(accountId)}`,
   )
-export const getMonthlySummary = (month: string) =>
-  apiFetch<MonthlySummary>(`/api/v1/transactions/summary?month=${month}`)
+export const getMonthlySummary = (month: string, accountId?: string) =>
+  apiFetch<MonthlySummary>(`/api/v1/transactions/summary?month=${month}${acct(accountId)}`)
 export const listCategories = () => apiFetch<string[]>('/api/v1/transactions/categories')
 export const createTransaction = (body: Record<string, unknown>) =>
   apiFetch<Transaction>('/api/v1/transactions/', { method: 'POST', body: JSON.stringify(body) })
@@ -244,12 +248,15 @@ export const updateTransactionCategory = (id: string, category: string) =>
 export const deleteTransaction = (id: string) =>
   apiFetch<void>(`/api/v1/transactions/${id}`, { method: 'DELETE' })
 
-export async function importStatement(file: File, bankName?: string, password?: string): Promise<ImportResult> {
+export async function importStatement(
+  file: File, bankName?: string, password?: string, accountId?: string,
+): Promise<ImportResult> {
   const token = await getToken()
   const form = new FormData()
   form.append('file', file)
   if (bankName) form.append('bank_name', bankName)
   if (password) form.append('password', password)
+  if (accountId) form.append('account_id', accountId)
   const res = await fetch(`${API_BASE}/api/v1/transactions/import`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
@@ -349,7 +356,8 @@ export interface SpendTrend {
   top_categories: string[]
   average_monthly_spend: number
 }
-export const getSpendTrend = (months = 6) => apiFetch<SpendTrend>(`/api/v1/transactions/trend?months=${months}`)
+export const getSpendTrend = (months = 6, accountId?: string) =>
+  apiFetch<SpendTrend>(`/api/v1/transactions/trend?months=${months}${acct(accountId)}`)
 
 export interface RecurringItem {
   name: string
@@ -362,8 +370,10 @@ export interface RecurringItem {
   next_expected: string
   variable: boolean
 }
-export const getRecurring = () =>
-  apiFetch<{ items: RecurringItem[]; monthly_commitments: number }>('/api/v1/transactions/recurring')
+export const getRecurring = (accountId?: string) =>
+  apiFetch<{ items: RecurringItem[]; monthly_commitments: number }>(
+    `/api/v1/transactions/recurring${accountId ? `?account_id=${encodeURIComponent(accountId)}` : ''}`,
+  )
 
 export interface HoldingReturn {
   holding_id: string
@@ -438,3 +448,156 @@ export interface LoanTracker {
   }[]
 }
 export const getLoanTracker = (id: string) => apiFetch<LoanTracker>(`/api/v1/loan-tracker/${id}`)
+
+// ── Profile ────────────────────────────────────────────────────────────────────
+
+export interface Profile {
+  full_name?: string | null
+  phone?: string | null
+  address_line1?: string | null
+  address_line2?: string | null
+  city?: string | null
+  state?: string | null
+  postal_code?: string | null
+  country?: string | null
+  email?: string | null
+  avatar_url?: string | null
+}
+
+export const getProfile = () => apiFetch<Profile>('/api/v1/profile')
+export const saveProfile = (body: Record<string, unknown>) =>
+  apiFetch<Profile>('/api/v1/profile', { method: 'PUT', body: JSON.stringify(body) })
+export const deleteAvatar = () => apiFetch<Profile>('/api/v1/profile/avatar', { method: 'DELETE' })
+
+export async function uploadAvatar(file: File): Promise<Profile> {
+  const token = await getToken()
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${API_BASE}/api/v1/profile/avatar`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!res.ok) throw new Error(await errorMessage(res, `Upload failed (${res.status})`))
+  return res.json() as Promise<Profile>
+}
+
+// ── Bank accounts ──────────────────────────────────────────────────────────────
+
+export interface BankAccount {
+  id: string
+  bank_name: string
+  account_type: 'SAVINGS' | 'CURRENT' | 'SALARY'
+  last4: string
+  nickname?: string | null
+  ifsc?: string | null
+}
+export interface BankAccountSummary extends BankAccount {
+  balance: number
+  transaction_count: number
+  last_transaction_date: string | null
+}
+export interface BankSummary {
+  accounts: BankAccountSummary[]
+  total_balance: number
+  unassigned: { count: number; balance: number }
+}
+
+export const getBankSummary = () => apiFetch<BankSummary>('/api/v1/bank-accounts/summary')
+export const listBankAccounts = () => apiFetch<BankAccount[]>('/api/v1/bank-accounts')
+export const createBankAccount = (body: Record<string, unknown>) =>
+  apiFetch<BankAccount>('/api/v1/bank-accounts', { method: 'POST', body: JSON.stringify(body) })
+export const updateBankAccount = (id: string, body: Record<string, unknown>) =>
+  apiFetch<BankAccount>(`/api/v1/bank-accounts/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const deleteBankAccount = (id: string) => apiFetch<void>(`/api/v1/bank-accounts/${id}`, { method: 'DELETE' })
+export const assignUnassigned = (id: string) =>
+  apiFetch<{ assigned: number }>(`/api/v1/bank-accounts/${id}/assign-unassigned`, { method: 'POST' })
+
+// ── Credit cards ───────────────────────────────────────────────────────────────
+
+export interface CreditCard {
+  id: string
+  bank_name: string
+  card_name?: string | null
+  network?: 'VISA' | 'MASTERCARD' | 'AMEX' | 'RUPAY' | 'DINERS' | 'OTHER' | null
+  last4: string
+  credit_limit?: number | null
+  statement_day?: number | null
+  due_day?: number | null
+  annual_fee?: number | null
+  interest_rate?: number | null
+}
+export interface CardStatement {
+  id: string
+  card_id: string
+  statement_date: string
+  period_start?: string | null
+  period_end?: string | null
+  due_date?: string | null
+  total_due: number
+  minimum_due?: number | null
+  paid: boolean
+  source: string
+}
+export interface CardDue {
+  date: string
+  days_left: number
+  overdue: boolean
+  estimated: boolean
+  amount_due: number
+  minimum_due: number | null
+}
+export interface CardOverviewItem {
+  card: CreditCard
+  credit_limit: number | null
+  outstanding: number
+  available_credit: number | null
+  utilization_pct: number | null
+  last_statement: CardStatement | null
+  next_due: CardDue | null
+  statement_count: number
+}
+export interface CardsOverview {
+  cards: CardOverviewItem[]
+  totals: { credit_limit: number; outstanding: number; utilization_pct: number | null }
+  upcoming_dues: (CardDue & { card_id: string; label: string })[]
+}
+export interface CardTxn {
+  id: string
+  txn_date: string
+  description: string
+  amount: number
+  category?: string | null
+}
+
+export const getCardsOverview = () => apiFetch<CardsOverview>('/api/v1/credit-cards/overview')
+export const createCreditCard = (body: Record<string, unknown>) =>
+  apiFetch<CreditCard>('/api/v1/credit-cards', { method: 'POST', body: JSON.stringify(body) })
+export const updateCreditCard = (id: string, body: Record<string, unknown>) =>
+  apiFetch<CreditCard>(`/api/v1/credit-cards/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const deleteCreditCard = (id: string) => apiFetch<void>(`/api/v1/credit-cards/${id}`, { method: 'DELETE' })
+export const listCardStatements = (cardId: string) => apiFetch<CardStatement[]>(`/api/v1/credit-cards/${cardId}/statements`)
+export const getStatementTransactions = (id: string) =>
+  apiFetch<{ statement: CardStatement; transactions: CardTxn[]; by_category: { category: string; total: number }[] }>(
+    `/api/v1/credit-cards/statements/${id}/transactions`,
+  )
+export const updateCardStatement = (id: string, body: Record<string, unknown>) =>
+  apiFetch<CardStatement>(`/api/v1/credit-cards/statements/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const deleteCardStatement = (id: string) =>
+  apiFetch<void>(`/api/v1/credit-cards/statements/${id}`, { method: 'DELETE' })
+
+export async function importCardStatement(
+  cardId: string, file: File, password?: string,
+): Promise<{ statement: CardStatement; transactions_inserted: number; duplicates_skipped: number }> {
+  const token = await getToken()
+  const form = new FormData()
+  form.append('file', file)
+  if (password) form.append('password', password)
+  const res = await fetch(`${API_BASE}/api/v1/credit-cards/${cardId}/statements/import`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!res.ok) throw new Error(await errorMessage(res, `Import failed (${res.status})`))
+  return res.json()
+}

@@ -14,6 +14,7 @@ class TransactionCreate(BaseModel):
     category: Optional[str] = None  # auto-categorised when omitted
     bank_name: Optional[str] = None
     account_last4: Optional[str] = None
+    account_id: Optional[UUID] = None
 
 
 class TransactionUpdate(BaseModel):
@@ -23,6 +24,7 @@ class TransactionUpdate(BaseModel):
     category: Optional[str] = None
     bank_name: Optional[str] = None
     account_last4: Optional[str] = None
+    account_id: Optional[UUID] = None
 
 
 class Transaction(BaseModel):
@@ -33,6 +35,7 @@ class Transaction(BaseModel):
     category: Optional[str] = None
     bank_name: Optional[str] = None
     account_last4: Optional[str] = None
+    account_id: Optional[UUID] = None
     created_at: datetime
 
 

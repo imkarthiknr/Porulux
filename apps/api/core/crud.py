@@ -44,6 +44,8 @@ def make_crud_router(
         try:
             res = get_supabase_client().table(table).insert(data).execute()
         except APIError as exc:
+            if exc.code == "23505":
+                raise HTTPException(status.HTTP_409_CONFLICT, detail="That entry already exists.")
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=exc.message)
         return res.data[0]
 

@@ -7,13 +7,13 @@ import { formatINR } from '@/lib/format'
 
 const fmt = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 
-export default function RecurringPayments({ refreshKey }: { refreshKey?: number }) {
+export default function RecurringPayments({ refreshKey, accountId }: { refreshKey?: number; accountId?: string }) {
   const [data, setData] = useState<{ items: RecurringItem[]; monthly_commitments: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    getRecurring().then((d) => { setData(d); setError(null) }).catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
-  }, [refreshKey])
+    getRecurring(accountId).then((d) => { setData(d); setError(null) }).catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
+  }, [refreshKey, accountId])
 
   const expenses = data?.items.filter((i) => i.direction === 'expense') ?? []
   const income = data?.items.filter((i) => i.direction === 'income') ?? []

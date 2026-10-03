@@ -6,7 +6,9 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import documents, insights, networth, salary, settings, transactions
+from routers import cards, documents, insights, networth, profile, salary, settings, transactions
+from routers.bank_accounts import accounts_crud
+from routers.bank_accounts import router as bank_accounts_router
 from routers.portfolio import epf_nps_router, holdings_router, loans_router
 
 app = FastAPI(title="Porulux API", version="0.1.0", redirect_slashes=False)
@@ -41,6 +43,11 @@ app.add_middleware(
 app.include_router(salary.router)
 app.include_router(networth.router)
 app.include_router(documents.router)
+app.include_router(profile.router)
+app.include_router(bank_accounts_router)
+app.include_router(accounts_crud)
+app.include_router(cards.router)
+app.include_router(cards.cards_crud)
 app.include_router(insights.router)
 app.include_router(settings.router)
 app.include_router(transactions.router)
