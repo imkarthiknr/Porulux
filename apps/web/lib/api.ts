@@ -377,6 +377,7 @@ export const getRecurring = (accountId?: string) =>
 
 export interface HoldingReturn {
   holding_id: string
+  source?: string | null
   symbol: string
   name: string
   holding_type: string
@@ -601,3 +602,64 @@ export async function importCardStatement(
   if (!res.ok) throw new Error(await errorMessage(res, `Import failed (${res.status})`))
   return res.json()
 }
+
+// ── Import holdings from a brokerage / CAS statement ──────────────────────────
+
+export type HoldingKind = 'STOCK' | 'MF' | 'ETF' | 'BOND' | 'SGB' | 'OTHER'
+
+export interface ImportEntry {
+  key: string
+  name: string
+  symbol: string
+  isin: string | null
+  holding_type: HoldingKind
+  units: number
+  avg_buy_price: number | null
+  current_price: number | null
+  invested: number | null
+  current_value: number | null
+  action: 'new' | 'update' | 'unchanged'
+  existing_id: string | null
+  changes: Record<string, { from: number | null; to: number | null }>
+}
+
+export interface ImportPreview {
+  source: string
+  entries: ImportEntry[]
+  missing: { id: string; name: string | null; symbol: string | null; units: number | null }[]
+  warnings: string[]
+  counts: { new: number; update: number; unchanged: number }
+  totals: { invested: number; current_value: number }
+}
+
+export async function previewHoldingsImport(file: File, source?: string, password?: string): Promise<ImportPreview> {
+  const token = await getToken()
+  const form = new FormData()
+  form.append('file', file)
+  if (source) form.append('source', source)
+  if (password) form.append('password', password)
+  const res = await fetch(`${API_BASE}/api/v1/investments/import/preview`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!res.ok) throw new Error(await errorMessage(res, `Could not read the statement (${res.status})`))
+  return res.json() as Promise<ImportPreview>
+}
+
+export interface ConfirmRowBody {
+  name: string
+  symbol: string
+  isin: string | null
+  holding_type: HoldingKind
+  units: number
+  avg_buy_price: number | null
+  current_price: number | null
+  existing_id: string | null
+}
+
+export const confirmHoldingsImport = (body: { source: string; rows: ConfirmRowBody[]; remove_ids: string[] }) =>
+  apiFetch<{ inserted: number; updated: number; removed: number }>('/api/v1/investments/import/confirm', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })

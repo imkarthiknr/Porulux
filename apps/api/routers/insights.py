@@ -187,7 +187,7 @@ async def investment_returns(user_id: str = Depends(get_current_user)):
             total_cost += cost
             total_value += value
         out.append({
-            "holding_id": h["id"], "symbol": h["symbol"], "name": h["name"], "holding_type": h["holding_type"],
+            "holding_id": h["id"], "source": h.get("source"), "symbol": h["symbol"], "name": h["name"], "holding_type": h["holding_type"],
             "units": units, "invested": round(cost, 2) if cost is not None else None,
             "current_value": round(value, 2) if value is not None else None,
             "gain": round(value - cost, 2) if cost is not None and value is not None else None,

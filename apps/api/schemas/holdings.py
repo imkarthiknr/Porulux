@@ -31,5 +31,7 @@ class HoldingUpdate(BaseModel):
 
 class Holding(HoldingCreate):
     id: UUID
+    source: Optional[str] = None
+    last_imported_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime

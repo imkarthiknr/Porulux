@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Fragment, useCallback, useEffect, useState } from 'react'
 
 import DashboardNav from '@/components/dashboard/DashboardNav'
+import HoldingsImporter from '@/components/dashboard/HoldingsImporter'
 import {
   addLot, deleteLot, getInvestmentReturns, listLots,
   type HoldingReturn, type InvestmentReturns, type Lot,
@@ -105,11 +106,12 @@ export default function InvestmentsPage() {
 
         {error && <p className="text-sm text-red-500">{error}</p>}
         {!data && !error && <p className="text-sm text-slate-400">Loading…</p>}
+        {data && <HoldingsImporter onImported={load} startOpen={data.holdings.length === 0} />}
 
         {data && data.holdings.length === 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
             <p className="text-sm text-slate-500">No holdings yet.</p>
-            <p className="text-xs text-slate-400 mt-1">Add stocks, funds or ETFs under Accounts, then record your buy dates here.</p>
+            <p className="text-xs text-slate-400 mt-1">Import a broker statement above, or add holdings one by one under Accounts. Then record buy dates here for XIRR.</p>
           </div>
         )}
 
@@ -151,7 +153,7 @@ export default function InvestmentsPage() {
                       <tr className="border-b border-slate-50">
                         <td className="py-2 pr-4">
                           <p className="font-medium text-slate-800">{h.name}</p>
-                          <p className="text-xs text-slate-500">{h.symbol} · {h.holding_type} · {h.units} units · {h.lots} lots</p>
+                          <p className="text-xs text-slate-500">{h.symbol} · {h.holding_type} · {h.units} units · {h.lots} lots{h.source ? ` · ${h.source}` : ''}</p>
                         </td>
                         <td className="py-2 pr-4 text-right">{h.invested == null ? '—' : formatINR(h.invested)}</td>
                         <td className="py-2 pr-4 text-right">{h.current_value == null ? '—' : formatINR(h.current_value)}</td>
