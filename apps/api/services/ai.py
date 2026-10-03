@@ -52,17 +52,21 @@ def parse_json(text: str):
 
 
 TRANSACTIONS_PROMPT = (
-    "Extract EVERY transaction from this Indian bank statement. Return ONLY a JSON array (no markdown, "
-    "no explanation), one object per transaction, in statement order:\n"
-    '[{"date":"YYYY-MM-DD","description":"<narration>","amount":<number>}]\n'
-    "amount is a plain INR number: NEGATIVE for debits/withdrawals, POSITIVE for credits/deposits. "
-    "Skip opening/closing balance rows and running-total rows."
+    "Extract EVERY transaction from this Indian bank statement. Return ONLY a JSON object (no markdown, "
+    "no explanation):\n"
+    '{"opening_balance":<number or null>,"transactions":[{"date":"YYYY-MM-DD","description":"<narration>","amount":<number>}]}\n'
+    "opening_balance is the account balance before the first transaction (the statement's opening balance), "
+    "or null if not shown. amount is a plain INR number: NEGATIVE for debits/withdrawals, POSITIVE for "
+    "credits/deposits. List transactions in statement order. Skip opening/closing balance rows and running-total rows."
 )
 
 
-async def extract_transactions(data: bytes, media_type: str) -> list[dict]:
+async def extract_transactions(data: bytes, media_type: str) -> tuple[float | None, list[dict]]:
     raw = await generate(data, media_type, TRANSACTIONS_PROMPT, max_tokens=32000)
     result = parse_json(raw)
-    if not isinstance(result, list):
-        raise ValueError("Expected a JSON array of transactions")
-    return result
+    if isinstance(result, list):  # tolerate a bare array
+        return None, result
+    if not isinstance(result, dict) or not isinstance(result.get("transactions"), list):
+        raise ValueError("Expected an object with a transactions array")
+    opening = result.get("opening_balance")
+    return (float(opening) if isinstance(opening, (int, float)) else None), result["transactions"]

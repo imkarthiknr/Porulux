@@ -4,6 +4,7 @@ const LINKS = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/dashboard/accounts', label: 'Accounts' },
   { href: '/dashboard/transactions', label: 'Transactions' },
+  { href: '/dashboard/salary', label: 'Salary' },
   { href: '/dashboard/upload', label: '+ Upload' },
 ]
 

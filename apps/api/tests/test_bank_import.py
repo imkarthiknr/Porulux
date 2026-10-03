@@ -65,3 +65,16 @@ def test_parse_date_variants():
 )
 def test_categorize(desc, amount, expected):
     assert categorize(desc, amount) == expected
+
+
+def test_opening_balance_derived_from_running_balance():
+    from services.bank_import import derive_opening_balance
+    txns = parse_csv(HDFC_STYLE)
+    # first row: -1,250.50 leaving 98,749.50 -> opened at 100,000.00
+    assert derive_opening_balance(txns) == 100000.00
+
+
+def test_opening_balance_handles_newest_first_statements():
+    from services.bank_import import derive_opening_balance
+    csv = b"Date,Narration,Debit,Credit,Balance\n03/04/24,B,,50.00,150.00\n02/04/24,A,20.00,,100.00\n"
+    assert derive_opening_balance(parse_csv(csv)) == 120.00

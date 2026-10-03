@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useCallback, useRef, useState } from 'react'
 
 import { formatINR } from '@/lib/format'
-import { savePayslip, uploadDocument, type DocType, type UploadResult } from '@/lib/api'
+import { importStatement, savePayslip, uploadDocument, type DocType, type UploadResult } from '@/lib/api'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -149,6 +149,8 @@ export default function UploadPage() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [file, setFile] = useState<File | null>(null)
+  const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = useCallback(
@@ -159,6 +161,8 @@ export default function UploadPage() {
       setError(null)
       setSaveState('idle')
       setSaveError(null)
+      setSavedMsg(null)
+      setFile(file)
 
       try {
         const res = await uploadDocument(file, docType, (pct) => setProgress(pct))
@@ -198,6 +202,14 @@ export default function UploadPage() {
     try {
       if (result.doc_type === 'payslip') {
         await savePayslip(result.data)
+        setSavedMsg('Payslip saved to your salary history.')
+      } else if (result.doc_type === 'bank_statement') {
+        if (!file) throw new Error('Original file is no longer available. Upload it again.')
+        const r = await importStatement(file)
+        setSavedMsg(
+          `Imported ${r.inserted} of ${r.parsed} transactions` +
+            (r.duplicates_skipped ? ` (${r.duplicates_skipped} already existed).` : '.'),
+        )
       }
       setSaveState('saved')
     } catch (err) {
@@ -212,11 +224,16 @@ export default function UploadPage() {
     setError(null)
     setSaveState('idle')
     setSaveError(null)
+    setSavedMsg(null)
+    setFile(null)
     setProgress(0)
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  const canSave = result && result.doc_type !== 'unknown' && Object.keys(result.data).length > 0
+  const canSave =
+    !!result &&
+    (result.doc_type === 'payslip' || result.doc_type === 'bank_statement') &&
+    Object.keys(result.data).length > 0
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -339,7 +356,13 @@ export default function UploadPage() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                   </svg>
-                  Saved to Porulux
+                  {savedMsg ?? 'Saved to Porulux'}
+                  <Link
+                    href={result.doc_type === 'bank_statement' ? '/dashboard/transactions' : '/dashboard/salary'}
+                    className="ml-auto text-indigo-600 hover:underline"
+                  >
+                    {result.doc_type === 'bank_statement' ? 'View transactions →' : 'View salary →'}
+                  </Link>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -348,12 +371,14 @@ export default function UploadPage() {
                     disabled={!canSave || saveState === 'saving'}
                     className="w-full py-2.5 px-4 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    {saveState === 'saving' ? 'Saving…' : 'Save to Porulux'}
+                    {saveState === 'saving'
+                      ? result.doc_type === 'bank_statement' ? 'Importing transactions…' : 'Saving…'
+                      : result.doc_type === 'bank_statement' ? 'Import transactions to Porulux' : 'Save to Porulux'}
                   </button>
                   {saveState === 'error' && saveError && (
                     <p className="text-xs text-red-500">{saveError}</p>
                   )}
-                  {result.doc_type !== 'payslip' && result.doc_type !== 'unknown' && (
+                  {result.doc_type !== 'payslip' && result.doc_type !== 'bank_statement' && result.doc_type !== 'unknown' && (
                     <p className="text-xs text-slate-400 text-center">
                       Direct save for {DOC_TYPE_LABELS[result.doc_type] ?? result.doc_type} coming soon.
                     </p>

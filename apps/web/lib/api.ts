@@ -254,3 +254,22 @@ export async function importStatement(file: File, bankName?: string): Promise<Im
   }
   return res.json() as Promise<ImportResult>
 }
+
+// ── Salary ─────────────────────────────────────────────────────────────────────
+
+export interface SalaryRecord {
+  id: string
+  month: number
+  year: number
+  employer_name?: string | null
+  basic?: number | null
+  hra?: number | null
+  pf_employee?: number | null
+  income_tax?: number | null
+  professional_tax?: number | null
+  gross_pay?: number | null
+  net_pay?: number | null
+}
+
+export const listSalary = () => apiFetch<SalaryRecord[]>('/api/v1/salary/')
+export const deleteSalary = (id: string) => apiFetch<void>(`/api/v1/salary/${id}`, { method: 'DELETE' })

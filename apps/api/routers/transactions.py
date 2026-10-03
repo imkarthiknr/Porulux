@@ -19,13 +19,14 @@ from schemas.transactions import (
     TransactionUpdate,
 )
 from services import ai
-from services.bank_import import ImportError_, ParsedTransaction, parse_csv, parse_date
+from services.bank_import import ImportError_, ParsedTransaction, derive_opening_balance, parse_csv, parse_date
 from services.categorizer import CATEGORIES, categorize
 
 router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 
 _TABLE = "bank_transactions"
 _MAX_UPLOAD = 20 * 1024 * 1024
+OPENING_BALANCE = "Opening Balance"
 _AI_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/webp"}
 
 
@@ -109,6 +110,7 @@ async def monthly_summary(
         .eq("user_id", user_id).gte("transaction_date", start).lt("transaction_date", end)
         .limit(10000).execute()
     ).data
+    rows = [r for r in rows if r["category"] != OPENING_BALANCE]
     income = sum(r["amount"] for r in rows if r["amount"] > 0)
     expenses = sum(-r["amount"] for r in rows if r["amount"] < 0)
     by_cat: dict[str, float] = defaultdict(float)
@@ -145,14 +147,17 @@ async def import_statement(
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File exceeds 20 MB limit.")
 
     parsed: list[ParsedTransaction] = []
+    opening: float | None = None
     if is_csv:
         try:
             parsed = parse_csv(content)
+            opening = derive_opening_balance(parsed)
         except ImportError_ as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     elif media_type in _AI_TYPES:
         try:
-            for item in await ai.extract_transactions(content, media_type):
+            opening, items = await ai.extract_transactions(content, media_type)
+            for item in items:
                 d = parse_date(str(item.get("date", "")))
                 amount = item.get("amount")
                 desc = str(item.get("description") or "").strip()
@@ -195,7 +200,21 @@ async def import_statement(
             "bank_name": bank_name,
             "account_last4": account_last4,
         })
+    # First import for this user: seed the balance the statement started with, so net worth's
+    # bank balance matches the real account instead of just the sum of these rows.
+    if opening and abs(opening) > 0.005 and rows:
+        has_any = client.table(_TABLE).select("id").eq("user_id", user_id).limit(1).execute().data
+        if not has_any:
+            rows.append({
+                "user_id": user_id,
+                "transaction_date": lo,
+                "description": "Opening balance",
+                "amount": round(opening, 2),
+                "category": OPENING_BALANCE,
+                "bank_name": bank_name,
+                "account_last4": account_last4,
+            })
     for i in range(0, len(rows), 500):
         client.table(_TABLE).insert(rows[i:i + 500]).execute()
 
-    return ImportResult(parsed=len(parsed), inserted=len(rows), duplicates_skipped=skipped)
+    return ImportResult(parsed=len(parsed), inserted=len([r for r in rows if r['category'] != OPENING_BALANCE]), duplicates_skipped=skipped)

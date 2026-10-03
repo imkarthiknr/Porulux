@@ -94,3 +94,25 @@ def test_trailing_slash_is_equivalent_and_never_redirects(api):
     # collection routes: slash or not, no 307
     for path in ("/api/v1/transactions", "/api/v1/transactions/"):
         assert client.get(path, follow_redirects=False).status_code == 200
+
+
+CSV_WITH_BALANCE = b"""Date,Narration,Debit,Credit,Balance
+01/04/24,SWIGGY ORDER,300.00,,9700.00
+02/04/24,ACME SALARY,,100000.00,109700.00
+"""
+
+
+def test_first_import_seeds_opening_balance_but_not_counted_as_inserted(api):
+    fake = FakeClient()
+    res = api(fake).post("/api/v1/transactions/import", files={"file": ("s.csv", CSV_WITH_BALANCE, "text/csv")})
+    assert res.json() == {"parsed": 2, "inserted": 2, "duplicates_skipped": 0}
+    opening = [r for r in fake.store if r["category"] == "Opening Balance"]
+    assert len(opening) == 1 and opening[0]["amount"] == 10000.00
+    # running total of everything equals the real closing balance
+    assert round(sum(r["amount"] for r in fake.store), 2) == 109700.00
+
+
+def test_no_opening_balance_when_user_already_has_transactions(api):
+    fake = FakeClient([{"id": "x", "transaction_date": "2024-03-01", "description": "old", "amount": 5.0}])
+    api(fake).post("/api/v1/transactions/import", files={"file": ("s.csv", CSV_WITH_BALANCE, "text/csv")})
+    assert not [r for r in fake.store if r["category"] == "Opening Balance"]

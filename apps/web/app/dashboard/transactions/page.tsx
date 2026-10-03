@@ -175,7 +175,7 @@ export default function TransactionsPage() {
                           onChange={(e) => onRecategorise(t.id, e.target.value)}
                           className="rounded border border-slate-200 px-2 py-1 text-xs bg-white"
                         >
-                          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                          {[...categories, ...(t.category && !categories.includes(t.category) ? [t.category] : [])].map((c) => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </td>
                       <td className={`py-2 pr-4 text-right whitespace-nowrap font-medium ${t.amount < 0 ? 'text-red-600' : 'text-green-600'}`}>

@@ -16,6 +16,7 @@ _DESC_HEADERS = ("narration", "description", "particulars", "remarks", "transact
 _DEBIT_HEADERS = ("debit", "withdrawal", "withdrawal amt", "withdrawal amount", "dr", "debit amount")
 _CREDIT_HEADERS = ("credit", "deposit", "deposit amt", "deposit amount", "cr", "credit amount")
 _AMOUNT_HEADERS = ("amount",)
+_BALANCE_HEADERS = ("closing balance", "balance", "running balance", "available balance")
 _TYPE_HEADERS = ("dr/cr", "cr/dr", "type", "transaction type")
 
 
@@ -28,6 +29,7 @@ class ParsedTransaction:
     transaction_date: date
     description: str
     amount: float  # positive = credit, negative = debit
+    balance: float | None = None  # account balance after this row, when the statement has it
 
 
 def parse_date(s: str) -> date | None:
@@ -93,6 +95,7 @@ def parse_csv(content: bytes) -> list[ParsedTransaction]:
     i_credit = _find(headers, _CREDIT_HEADERS)
     i_amount = _find(headers, _AMOUNT_HEADERS)
     i_type = _find(headers, _TYPE_HEADERS)
+    i_balance = _find(headers, _BALANCE_HEADERS)
     if i_debit is None and i_credit is None and i_amount is None:
         raise ImportError_("Could not find debit/credit or amount columns.")
 
@@ -125,8 +128,18 @@ def parse_csv(content: bytes) -> list[ParsedTransaction]:
                 amount = abs(amount)
         if amount is None or amount == 0:
             continue
-        out.append(ParsedTransaction(d, desc, round(amount, 2)))
+        out.append(ParsedTransaction(d, desc, round(amount, 2), parse_amount(cell(row, i_balance))))
 
     if not out:
         raise ImportError_("No transactions found in the file.")
     return out
+
+
+def derive_opening_balance(txns: list[ParsedTransaction]) -> float | None:
+    """Balance before the statement started, from the first chronological row's running balance."""
+    if not txns:
+        return None
+    first = txns[-1] if txns[0].transaction_date > txns[-1].transaction_date else txns[0]
+    if first.balance is None:
+        return None
+    return round(first.balance - first.amount, 2)

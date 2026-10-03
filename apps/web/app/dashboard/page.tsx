@@ -1,10 +1,14 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { formatINR } from '@/lib/format'
 import DashboardNav from '@/components/dashboard/DashboardNav'
 import SummaryCard from '@/components/dashboard/SummaryCard'
 import NetWorthChart from '@/components/dashboard/NetWorthChart'
 import AssetBreakdownChart from '@/components/dashboard/AssetBreakdownChart'
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -20,6 +24,14 @@ interface Snapshot {
   total_liabilities: number
   net_worth: number
   breakdown: Breakdown
+}
+
+interface SalaryRow {
+  id: string
+  month: number
+  year: number
+  gross_pay?: number | null
+  net_pay?: number | null
 }
 
 interface HistoryEntry {
@@ -84,6 +96,8 @@ export default async function DashboardPage() {
   // POST saves today's snapshot (upsert per day) and returns it, which keeps the trend chart populated.
   const snapshot = await fetchJSON<Snapshot>('/api/v1/networth/snapshot', session.access_token, 'POST')
   const history = await fetchJSON<HistoryEntry[]>('/api/v1/networth/history', session.access_token)
+  const salary = await fetchJSON<SalaryRow[]>('/api/v1/salary', session.access_token)
+  const latestSalary = salary?.[0]
 
   const emptyBreakdown: Breakdown = { investments: 0, epf_nps: 0, bank_balance: 0, loans: 0 }
   const safeSnapshot: Snapshot = snapshot ?? {
@@ -117,6 +131,21 @@ export default async function DashboardPage() {
           <SummaryCard label="Net Worth" value={safeSnapshot.net_worth} variant="networth" />
           <SummaryCard label="Monthly Change" value={monthlyChange} variant="change" changePct={monthlyChangePct} />
         </div>
+
+        {latestSalary && (
+          <Link
+            href="/dashboard/salary"
+            className="flex flex-wrap items-center justify-between gap-2 bg-white rounded-2xl border border-slate-200 px-6 py-4 hover:border-indigo-300 transition-colors"
+          >
+            <span className="text-sm text-slate-500">
+              Latest salary · {MONTH_NAMES[latestSalary.month - 1]} {latestSalary.year}
+            </span>
+            <span className="text-sm text-slate-900">
+              Net <strong>{formatINR(latestSalary.net_pay ?? 0)}</strong>
+              <span className="text-slate-400"> · Gross {formatINR(latestSalary.gross_pay ?? 0)}</span>
+            </span>
+          </Link>
+        )}
 
         {safeHistory.length === 0 && safeSnapshot.net_worth === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
