@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import DashboardNav from '@/components/dashboard/DashboardNav'
+import { ThemeSegmented } from '@/components/ThemeToggle'
 import { deleteAIKey, getAISettings, saveAIKey, savePendingKeyIfAny, type AISettings } from '@/lib/api'
 
 const PROVIDERS = [
@@ -82,6 +83,14 @@ export default function SettingsPage() {
           <h1 className="text-2xl font-semibold text-slate-900">Settings</h1>
           <p className="text-sm text-slate-500 mt-0.5">AI document extraction runs on your own API key.</p>
         </div>
+
+        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Appearance</h2>
+            <p className="text-xs text-slate-500 mt-1">System follows your device and switches automatically.</p>
+          </div>
+          <div className="max-w-xs"><ThemeSegmented /></div>
+        </section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
           <div>

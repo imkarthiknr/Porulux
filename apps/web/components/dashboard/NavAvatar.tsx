@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 
 import { signOut } from '@/app/actions'
+import { ThemeSegmented } from '@/components/ThemeToggle'
 import { getProfile, type Profile } from '@/lib/api'
 
 export default function NavAvatar({ email }: { email?: string }) {
@@ -54,6 +55,10 @@ export default function NavAvatar({ email }: { email?: string }) {
           </div>
           <Link href="/dashboard/profile" className={item} onClick={() => setOpen(false)}>Profile</Link>
           <Link href="/dashboard/settings" className={item} onClick={() => setOpen(false)}>Settings & AI key</Link>
+          <div className="px-3 py-2 border-t border-slate-100">
+            <p className="text-[11px] uppercase tracking-wide text-slate-400 mb-1.5 px-1">Theme</p>
+            <ThemeSegmented />
+          </div>
           <button onClick={onSignOut} disabled={busy} className={`${item} border-t border-slate-100 text-red-600`}>
             {busy ? 'Signing out…' : 'Sign out'}
           </button>

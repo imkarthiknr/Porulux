@@ -11,6 +11,7 @@ import {
   type TooltipProps,
 } from 'recharts'
 import { compactINR, formatINR } from '@/lib/format'
+import { useTheme } from '@/lib/theme'
 
 interface HistoryEntry {
   snapshot_date: string
@@ -38,6 +39,8 @@ function CustomTooltip({ active, payload, label }: TooltipProps<number, string>)
 }
 
 export default function NetWorthChart({ history }: Props) {
+  const { resolved } = useTheme()
+  const grid = resolved === 'dark' ? '#1e293b' : '#f1f5f9'
   // API returns DESC; chart needs oldest → newest (left → right)
   const data = [...history]
     .reverse()
@@ -60,7 +63,7 @@ export default function NetWorthChart({ history }: Props) {
             <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
         <XAxis
           dataKey="date"
           tick={{ fontSize: 11, fill: '#94a3b8' }}

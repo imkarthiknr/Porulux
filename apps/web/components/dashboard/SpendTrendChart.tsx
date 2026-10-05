@@ -5,12 +5,15 @@ import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAx
 
 import { getSpendTrend, type SpendTrend } from '@/lib/api'
 import { compactINR, formatINR } from '@/lib/format'
+import { useTheme } from '@/lib/theme'
 
 const PALETTE = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#06b6d4', '#94a3b8']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const label = (ym: string) => `${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(2, 4)}`
 
 export default function SpendTrendChart({ refreshKey, accountId }: { refreshKey?: number; accountId?: string }) {
+  const { resolved } = useTheme()
+  const dark = resolved === 'dark'
   const [trend, setTrend] = useState<SpendTrend | null>(null)
   const [months, setMonths] = useState(6)
   const [view, setView] = useState<'flow' | 'categories'>('flow')
@@ -53,11 +56,16 @@ export default function SpendTrendChart({ refreshKey, accountId }: { refreshKey?
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="label" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(v: number) => compactINR(v)} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} width={56} />
-              <Tooltip formatter={(v: number) => formatINR(v)} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={dark ? '#334155' : '#e2e8f0'} />
+              <XAxis dataKey="label" tick={{ fontSize: 12, fill: dark ? '#94a3b8' : '#64748b' }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={(v: number) => compactINR(v)} tick={{ fontSize: 12, fill: dark ? '#94a3b8' : '#64748b' }} axisLine={false} tickLine={false} width={56} />
+              <Tooltip
+                formatter={(v: number) => formatINR(v)}
+                contentStyle={{ background: dark ? '#0f172a' : '#ffffff', border: `1px solid ${dark ? '#334155' : '#e2e8f0'}`, borderRadius: 8, color: dark ? '#e2e8f0' : '#0f172a' }}
+                labelStyle={{ color: dark ? '#cbd5e1' : '#334155' }}
+                cursor={{ fill: dark ? 'rgba(148,163,184,0.12)' : 'rgba(100,116,139,0.08)' }}
+              />
+              <Legend wrapperStyle={{ fontSize: 12, color: dark ? '#cbd5e1' : '#475569' }} />
               {view === 'flow' ? (
                 <>
                   <Bar dataKey="income" name="Income" fill="#10b981" radius={[3, 3, 0, 0]} />

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
+import { ThemeIconButton } from '@/components/ThemeToggle'
 import { createClient } from '@/lib/supabase'
 
 export default function ResetPasswordPage() {
@@ -37,6 +38,7 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="fixed top-3 right-3"><ThemeIconButton /></div>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <p className="text-3xl font-bold text-indigo-600 tracking-tight">₹ Porulux</p>

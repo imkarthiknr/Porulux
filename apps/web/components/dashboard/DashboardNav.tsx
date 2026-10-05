@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import NavAvatar from '@/components/dashboard/NavAvatar'
+import { ThemeIconButton } from '@/components/ThemeToggle'
 
 const LINKS = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -40,6 +41,7 @@ export default function DashboardNav({ active, email }: { active: string; email?
             + Upload
           </Link>
         </nav>
+        <ThemeIconButton />
         <NavAvatar email={email} />
       </div>
     </header>
