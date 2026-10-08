@@ -673,3 +673,11 @@ export const confirmHoldingsImport = (body: { source: string; rows: ConfirmRowBo
     method: 'POST',
     body: JSON.stringify(body),
   })
+
+// ── Feedback (becomes a GitHub issue) ─────────────────────────────────────────
+
+export type FeedbackKind = 'issue' | 'idea' | 'question'
+
+export function submitFeedback(kind: FeedbackKind, message: string, page?: string): Promise<{ ok: boolean; issue_number: number }> {
+  return apiFetch('/api/v1/feedback', { method: 'POST', body: JSON.stringify({ kind, message, page }) })
+}

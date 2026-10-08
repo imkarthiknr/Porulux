@@ -57,5 +57,6 @@ Apply `supabase/migrations/*.sql` in order to your Supabase project.
 
 - **API** → Cloud Run (`asia-south1`, min instances 0): `gcloud run deploy porulux-api --source apps/api --region asia-south1 --allow-unauthenticated --min-instances 0 --max-instances 2 --memory 512Mi`. Keep `SUPABASE_SERVICE_ROLE_KEY` and `GEMINI_API_KEY` in Secret Manager.
 - **Web** → Firebase App Hosting, root directory `apps/web`, live branch `main`; config in `apps/web/apphosting.yaml`.
+- **Feedback → GitHub issues:** the in-app *Help & feedback* page posts to `/api/v1/feedback`, which opens an issue labelled `customer-feedback` in the repo. Set `GITHUB_TOKEN` (fine-grained PAT, *Issues: read and write* on this repo only) and `GITHUB_REPO` (`owner/name`) on the API service, ideally via Secret Manager.
 - The web app proxies `/api/*` to the Cloud Run service (`API_URL`), so the browser only ever talks to one origin and no CORS is needed. Firebase Hosting rewrites are not used because Hosting strips Supabase's `sb-*` auth cookies.
 - In Supabase → Authentication → URL Configuration, add the App Hosting URL and `/callback` as redirect URLs.
