@@ -55,6 +55,7 @@ export default function NavAvatar({ email }: { email?: string }) {
           </div>
           <Link href="/dashboard/profile" className={item} onClick={() => setOpen(false)}>Profile</Link>
           <Link href="/dashboard/settings" className={item} onClick={() => setOpen(false)}>Settings & AI key</Link>
+          <Link href="/dashboard/feedback" className={item} onClick={() => setOpen(false)}>Help & feedback</Link>
           <div className="px-3 py-2 border-t border-slate-100">
             <p className="text-[11px] uppercase tracking-wide text-slate-400 mb-1.5 px-1">Theme</p>
             <ThemeSegmented />

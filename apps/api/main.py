@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from services.ai import PROVIDER_LABELS, AIKeyError, AIQuotaError
-from routers import cards, documents, holdings_import, insights, networth, profile, salary, settings, transactions
+from routers import cards, documents, feedback, holdings_import, insights, networth, profile, salary, settings, transactions
 from routers.bank_accounts import accounts_crud
 from routers.bank_accounts import router as bank_accounts_router
 from routers.portfolio import epf_nps_router, holdings_router, loans_router
@@ -82,6 +82,7 @@ app.include_router(cards.cards_crud)
 app.include_router(holdings_import.router)
 app.include_router(insights.router)
 app.include_router(settings.router)
+app.include_router(feedback.router)
 app.include_router(transactions.router)
 app.include_router(holdings_router)
 app.include_router(loans_router)

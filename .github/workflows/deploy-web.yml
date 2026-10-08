@@ -1,0 +1,47 @@
+name: Deploy web (Firebase App Hosting)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/deploy-web.yml'
+  workflow_dispatch:
+
+# Never run two rollouts at once; a newer push supersedes a queued one.
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Typecheck first so a broken build never reaches a rollout.
+      - name: Typecheck
+        working-directory: apps/web
+        run: |
+          npm ci
+          npx tsc --noEmit
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      # App Hosting builds the commit itself (Cloud Build); this just asks it to roll out main's HEAD.
+      - name: Create App Hosting rollout
+        run: >
+          npx -y firebase-tools@latest apphosting:rollouts:create
+          ${{ vars.APPHOSTING_BACKEND_ID }}
+          --git-branch main
+          --project ${{ vars.FIREBASE_PROJECT_ID }}
+          --force
