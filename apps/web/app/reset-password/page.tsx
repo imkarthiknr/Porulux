@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
+import Logo from '@/components/Logo'
 import { ThemeIconButton } from '@/components/ThemeToggle'
 import { createClient } from '@/lib/supabase'
 
@@ -41,7 +42,7 @@ export default function ResetPasswordPage() {
       <div className="fixed top-3 right-3"><ThemeIconButton /></div>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <p className="text-3xl font-bold text-indigo-600 tracking-tight">₹ Porulux</p>
+          <p className="flex items-center justify-center gap-2.5 text-3xl font-bold text-indigo-600 tracking-tight"><Logo size={40} />Porulux</p>
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
           <h1 className="text-xl font-semibold text-slate-900 mb-6">Set a new password</h1>
