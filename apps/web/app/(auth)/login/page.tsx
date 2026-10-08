@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { signIn, signUp } from '@/app/actions'
+import Logo from '@/components/Logo'
 import { ThemeIconButton } from '@/components/ThemeToggle'
 import { rememberPendingKey, saveAIKey, savePendingKeyIfAny } from '@/lib/api'
 import { safeNext } from '@/lib/redirect'
@@ -112,7 +113,7 @@ export default function LoginPage() {
       <div className="fixed top-3 right-3"><ThemeIconButton /></div>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <p className="text-3xl font-bold text-indigo-600 tracking-tight">₹ Porulux</p>
+          <p className="flex items-center justify-center gap-2.5 text-3xl font-bold text-indigo-600 tracking-tight"><Logo size={40} />Porulux</p>
           <p className="text-slate-500 mt-1 text-sm">Track wealth. Not just expenses.</p>
         </div>
 

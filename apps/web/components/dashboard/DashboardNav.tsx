@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import NavAvatar from '@/components/dashboard/NavAvatar'
+import Logo from '@/components/Logo'
 import { ThemeIconButton } from '@/components/ThemeToggle'
 
 const LINKS = [
@@ -19,7 +20,7 @@ export default function DashboardNav({ active, email }: { active: string; email?
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
       <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
-        <Link href="/dashboard" className="text-lg font-bold text-indigo-600 tracking-tight shrink-0">₹ Porulux</Link>
+        <Link href="/dashboard" className="flex items-center gap-2 text-lg font-bold text-indigo-600 tracking-tight shrink-0"><Logo size={28} />Porulux</Link>
         <nav className="flex items-center gap-5 overflow-x-auto flex-1 justify-end">
           {LINKS.map((l) => (
             <Link
