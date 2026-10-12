@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 
 import DashboardNav from '@/components/dashboard/DashboardNav'
+import LoanAccount from '@/components/dashboard/LoanAccount'
 import { getLoanTracker, listItems, updateItem, type Loan, type LoanTracker } from '@/lib/api'
 import { formatINR } from '@/lib/format'
 
@@ -197,7 +198,7 @@ export default function LoansPage() {
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Loans</h1>
-            <p className="text-sm text-slate-500 mt-0.5">EMI schedule, interest paid to date, and home loan tax benefit (80C and 24(b)).</p>
+            <p className="text-sm text-slate-500 mt-0.5">Statements and transactions, interest and principal paid so far, EMI schedule, and home loan tax benefit (80C and 24(b)).</p>
           </div>
           <Link href="/dashboard/accounts" className="rounded-lg border border-slate-300 bg-white text-sm font-medium px-4 py-2 hover:border-indigo-300">Add a loan</Link>
         </div>
@@ -218,6 +219,7 @@ export default function LoansPage() {
               </h2>
               <p className="text-sm text-slate-500">Outstanding entered: <strong className="text-slate-900">{formatINR(loan.outstanding_amount)}</strong></p>
             </div>
+            <LoanAccount loan={loan} onChange={load} />
             <Tracker loan={loan} onChange={load} />
           </section>
         ))}
