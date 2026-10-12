@@ -613,6 +613,68 @@ export async function importCardStatement(
   return res.json()
 }
 
+// ── Loan account statements ────────────────────────────────────────────────────
+
+export type LoanTxnKind = 'disbursement' | 'emi' | 'prepayment' | 'interest' | 'principal' | 'charge' | 'other'
+export interface LoanTxn {
+  id: string
+  statement_id: string | null
+  txn_date: string
+  description: string
+  kind: LoanTxnKind
+  amount: number
+  principal_amount: number | null
+  interest_amount: number | null
+  charges_amount: number | null
+  balance_after: number | null
+}
+export interface LoanStatement {
+  id: string
+  statement_date: string
+  period_start: string | null
+  period_end: string | null
+  opening_balance: number | null
+  closing_balance: number | null
+  source: string
+}
+export interface LoanAccount {
+  summary: {
+    interest_paid: number
+    principal_paid: number
+    charges_paid: number
+    total_paid: number
+    disbursed: number
+    prepaid: number
+    balance: number | null
+    balance_as_of: string | null
+    emis_paid: number
+    unsplit_emis: number
+    transaction_count: number
+    first_date: string | null
+    last_date: string | null
+  }
+  statements: LoanStatement[]
+  transactions: LoanTxn[]
+}
+export const getLoanAccount = (loanId: string) => apiFetch<LoanAccount>(`/api/v1/loans/${loanId}/account`)
+export const deleteLoanStatement = (id: string) => apiFetch<void>(`/api/v1/loans/statements/${id}`, { method: 'DELETE' })
+
+export async function importLoanStatement(
+  loanId: string, file: File, password?: string,
+): Promise<{ statement: LoanStatement; transactions_inserted: number; duplicates_skipped: number }> {
+  const token = await getToken()
+  const form = new FormData()
+  form.append('file', file)
+  if (password) form.append('password', password)
+  const res = await fetch(`${API_BASE}/api/v1/loans/${loanId}/statements/import`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!res.ok) throw new Error(await errorMessage(res, `Import failed (${res.status})`))
+  return res.json()
+}
+
 // ── Import holdings from a brokerage / CAS statement ──────────────────────────
 
 export type HoldingKind = 'STOCK' | 'MF' | 'ETF' | 'BOND' | 'SGB' | 'OTHER'

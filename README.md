@@ -40,6 +40,7 @@ Apply `supabase/migrations/*.sql` in order to your Supabase project.
 **Month 2 — Investments and loans**
 - [ ] CAS import and portfolio (XIRR), broker note parsing
 - [ ] Home loan tracker with 80C / 24B benefits, credit card statement import
+- [x] Loan account statements (PDF/image/CSV): interest paid, principal paid, charges, balance and transactions so far (migration 008)
 - [ ] EPF / NPS statement import
 
 **Month 3 — Automation and polish**
