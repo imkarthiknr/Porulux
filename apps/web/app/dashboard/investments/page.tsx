@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Fragment, useCallback, useEffect, useState } from 'react'
 
 import DashboardNav from '@/components/dashboard/DashboardNav'
+import Pagination, { usePagination } from '@/components/Pagination'
 import HoldingsImporter from '@/components/dashboard/HoldingsImporter'
 import {
   addLot, deleteLot, getInvestmentReturns, listLots,
@@ -33,6 +34,7 @@ function Lots({ holding, onChange }: { holding: HoldingReturn; onChange: () => v
   const [form, setForm] = useState({ lot_date: '', lot_type: 'BUY' as 'BUY' | 'SELL', units: '', price: '' })
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const paging = usePagination(lots, { pageSize: 10, sizes: [10, 25, 50] })
 
   const load = useCallback(async () => {
     try { setLots(await listLots(holding.holding_id)) } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load lots') }
@@ -69,7 +71,7 @@ function Lots({ holding, onChange }: { holding: HoldingReturn; onChange: () => v
         <table className="w-full text-xs">
           <thead><tr className="text-left text-slate-500"><th className="py-1">Date</th><th>Type</th><th className="text-right">Units</th><th className="text-right">Price</th><th /></tr></thead>
           <tbody>
-            {lots.map((l) => (
+            {paging.items.map((l) => (
               <tr key={l.id} className="border-t border-slate-200">
                 <td className="py-1">{l.lot_date}{l.assumed && <span className="ml-1 text-[10px] text-amber-600">approx.</span>}</td><td>{l.lot_type}</td>
                 <td className="text-right">{l.units}</td><td className="text-right">{formatINR(l.price)}</td>
@@ -79,6 +81,7 @@ function Lots({ holding, onChange }: { holding: HoldingReturn; onChange: () => v
           </tbody>
         </table>
       )}
+      <Pagination state={paging} label="lots" />
       <form onSubmit={onAdd} className="flex flex-wrap gap-2 items-end">
         <input type="date" required className={input} value={form.lot_date} onChange={(e) => setForm({ ...form, lot_date: e.target.value })} aria-label="Date" />
         <select className={input} value={form.lot_type} onChange={(e) => setForm({ ...form, lot_type: e.target.value as 'BUY' | 'SELL' })} aria-label="Type">
@@ -99,6 +102,7 @@ export default function InvestmentsPage() {
   const [open, setOpen] = useState<string | null>(null)
 
   const [refreshing, setRefreshing] = useState(false)
+  const holdingsPaging = usePagination(data?.holdings ?? [], { pageSize: 25 })
 
   // Show stored prices straight away, then replace them with live ones. Gains and XIRR are recomputed
   // by the API from whatever price it holds, so they move as soon as the live prices land.
@@ -186,7 +190,7 @@ export default function InvestmentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data!.holdings.map((h) => (
+                  {holdingsPaging.items.map((h) => (
                     <Fragment key={h.holding_id}>
                       <tr className="border-b border-slate-50">
                         <td className="py-2 pr-4">
@@ -216,6 +220,7 @@ export default function InvestmentsPage() {
                   ))}
                 </tbody>
               </table>
+              <Pagination state={holdingsPaging} label="holdings" />
             </section>
           </>
         )}

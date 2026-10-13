@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import DashboardNav from '@/components/dashboard/DashboardNav'
 import FileImporter from '@/components/dashboard/FileImporter'
+import Pagination, { usePagination } from '@/components/Pagination'
 import {
   createCreditCard, deleteCardStatement, deleteCreditCard, getCardsOverview, getStatementTransactions, importCardStatement,
   listCardStatements, updateCardStatement, updateCreditCard,
@@ -103,6 +104,7 @@ function StatementRow({ s, onChange }: { s: CardStatement; onChange: () => void 
   const [open, setOpen] = useState(false)
   const [detail, setDetail] = useState<Awaited<ReturnType<typeof getStatementTransactions>> | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const paging = usePagination(detail?.transactions ?? [])
 
   async function toggle() {
     const next = !open
@@ -158,11 +160,12 @@ function StatementRow({ s, onChange }: { s: CardStatement; onChange: () => void 
               </ul>
             )}
           </div>
-          <div className="lg:col-span-2 max-h-72 overflow-auto rounded-lg border border-slate-200">
+          <div className="lg:col-span-2">
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-slate-50"><tr className="text-left text-slate-500"><th className="py-1.5 px-3 font-medium">Date</th><th className="font-medium">Description</th><th className="font-medium">Category</th><th className="font-medium text-right px-3">Amount</th></tr></thead>
+              <thead className="bg-slate-50"><tr className="text-left text-slate-500"><th className="py-1.5 px-3 font-medium">Date</th><th className="font-medium">Description</th><th className="font-medium">Category</th><th className="font-medium text-right px-3">Amount</th></tr></thead>
               <tbody>
-                {detail.transactions.map((t) => (
+                {paging.items.map((t) => (
                   <tr key={t.id} className="border-t border-slate-100">
                     <td className="py-1.5 px-3 whitespace-nowrap">{t.txn_date}</td>
                     <td className="max-w-[16rem] truncate">{t.description}</td>
@@ -172,6 +175,8 @@ function StatementRow({ s, onChange }: { s: CardStatement; onChange: () => void 
                 ))}
               </tbody>
             </table>
+          </div>
+          <Pagination state={paging} label="transactions" />
           </div>
         </div>
       )}

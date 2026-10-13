@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 
 import DashboardNav from '@/components/dashboard/DashboardNav'
+import Pagination, { usePagination } from '@/components/Pagination'
 import { createSalary, deleteSalary, listSalary, updateSalary, type SalaryRecord } from '@/lib/api'
 import { formatINR } from '@/lib/format'
 
@@ -34,6 +35,7 @@ export default function SalaryPage() {
   const [editing, setEditing] = useState<string | 'new' | null>(null)
   const [form, setForm] = useState<Record<string, string>>(blank)
   const [saving, setSaving] = useState(false)
+  const paging = usePagination(rows, { pageSize: 12, sizes: [12, 24, 48] })
 
   const load = useCallback(async () => {
     try {
@@ -207,7 +209,7 @@ export default function SalaryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => (
+                  {paging.items.map((r) => (
                     <tr key={r.id} className="border-b border-slate-50">
                       <td className="py-2 pr-4 whitespace-nowrap">{MONTHS[r.month - 1]} {r.year}</td>
                       <td className="py-2 pr-4 text-slate-600 max-w-[14rem] truncate">{r.employer_name ?? '—'}</td>
@@ -225,6 +227,7 @@ export default function SalaryPage() {
                   ))}
                 </tbody>
               </table>
+              <Pagination state={paging} label="payslips" />
             </section>
           </>
         )}

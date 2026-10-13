@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import DashboardNav from '@/components/dashboard/DashboardNav'
+import Pagination, { usePagination } from '@/components/Pagination'
 import {
   createItem, deleteItem, listItems,
   type EpfNps, type Holding, type Loan, type Resource,
@@ -97,6 +98,7 @@ function Section<T extends { id: string }>({ config }: { config: SectionConfig<T
   const [form, setForm] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const paging = usePagination(rows)
 
   const load = useCallback(async () => {
     try {
@@ -166,7 +168,7 @@ function Section<T extends { id: string }>({ config }: { config: SectionConfig<T
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {paging.items.map((row) => (
                 <tr key={row.id} className="border-b border-slate-50">
                   {config.columns.map((c) => <td key={c.label} className="py-2 pr-4 text-slate-800">{c.render(row)}</td>)}
                   <td className="py-2 text-right">
@@ -176,6 +178,7 @@ function Section<T extends { id: string }>({ config }: { config: SectionConfig<T
               ))}
             </tbody>
           </table>
+          <Pagination state={paging} label="entries" />
         </div>
       )}
 

@@ -7,6 +7,7 @@ import {
   cleanKeyMessage, cleanPasswordMessage, confirmHoldingsImport, isKeyError, isPasswordError, previewHoldingsImport,
   type HoldingKind, type ImportEntry, type ImportPreview,
 } from '@/lib/api'
+import Pagination, { usePagination } from '@/components/Pagination'
 import { formatINR } from '@/lib/format'
 
 const SOURCES = ['Zerodha', 'Groww', 'Upstox', 'Angel One', 'ICICI Direct', 'HDFC Securities', 'Kotak Securities', 'Paytm Money', '5paisa', 'CAMS', 'KFintech', 'NSDL CAS', 'CDSL CAS']
@@ -36,6 +37,7 @@ export default function HoldingsImporter({ onImported, startOpen }: { onImported
   const [removeMissing, setRemoveMissing] = useState(false)
   const [heldSince, setHeldSince] = useState('')
   const [done, setDone] = useState<string | null>(null)
+  const paging = usePagination(rows, { resetKey: file?.name ?? '' })
 
   function reset() {
     setFile(null); setPassword(''); setNeedsPassword(false); setError(null); setKeyProblem(false)
@@ -169,7 +171,7 @@ export default function HoldingsImporter({ onImported, startOpen }: { onImported
                 <ul className="text-xs text-amber-700 list-disc pl-5">{preview.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
               )}
 
-              <div className="overflow-x-auto rounded-lg border border-slate-200 max-h-96 overflow-y-auto">
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-slate-50">
                     <tr className="text-left text-slate-500">
@@ -183,7 +185,7 @@ export default function HoldingsImporter({ onImported, startOpen }: { onImported
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((r, i) => (
+                    {paging.items.map((r, li) => { const i = paging.startIndex + li; return (
                       <tr key={r.key + i} className={`border-t border-slate-100 ${r.include ? '' : 'opacity-50'}`}>
                         <td className="py-2 px-3">
                           <input type="checkbox" checked={r.include} aria-label={`Include ${r.name}`}
@@ -212,10 +214,11 @@ export default function HoldingsImporter({ onImported, startOpen }: { onImported
                         <td className="text-right">{num(r.current_price)}</td>
                         <td className="text-right px-3">{r.current_value != null ? formatINR(r.current_value) : '—'}</td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>
+              <Pagination state={paging} label="holdings" />
 
               {preview.missing.length > 0 && (
                 <label className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900 cursor-pointer">
