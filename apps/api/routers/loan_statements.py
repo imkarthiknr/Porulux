@@ -105,21 +105,14 @@ async def import_loan_statement(
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Upload a PDF, image or CSV statement.")
 
     client = get_supabase_client()
-    dup = (
-        client.table("loan_statements").select("id").eq("loan_id", loan_id)
-        .eq("statement_date", parsed.statement_date.isoformat()).limit(1).execute()
-    ).data
-    if dup:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"The statement dated {parsed.statement_date.isoformat()} is already imported for this loan.")
-
-    stmt = client.table("loan_statements").insert({
-        "user_id": user.id, "loan_id": loan_id,
-        "statement_date": parsed.statement_date.isoformat(),
-        "period_start": parsed.period_start.isoformat() if parsed.period_start else None,
-        "period_end": parsed.period_end.isoformat() if parsed.period_end else None,
-        "opening_balance": parsed.opening_balance, "closing_balance": parsed.closing_balance,
-        "source": parsed.source,
-    }).execute().data[0]
+    # Same period as one already imported is a re-upload. (A statement's printed date is not used: PDFs
+    # downloaded together share it even when they cover different years.)
+    for existing in client.table("loan_statements").select("period_start,period_end").eq("loan_id", loan_id).execute().data:
+        if existing.get("period_start") == parsed.period_start.isoformat() and existing.get("period_end") == parsed.period_end.isoformat():
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=f"A statement covering {parsed.period_start.isoformat()} to {parsed.period_end.isoformat()} is already imported for this loan.",
+            )
 
     # Statements often overlap (a yearly one after a half-yearly one), so skip lines already stored.
     # The same line can legitimately repeat, so count occurrences rather than just checking presence.
@@ -132,19 +125,32 @@ async def import_loan_statement(
     ).data:
         seen[(r["txn_date"], r["description"], r["kind"], round(float(r["amount"]), 2))] += 1
 
-    rows, skipped = [], 0
+    fresh, skipped = [], 0
     for n, t in enumerate(parsed.transactions):
         key = (t.txn_date.isoformat(), t.description, t.kind, t.amount)
         if seen[key] > 0:
             seen[key] -= 1
             skipped += 1
-            continue
-        rows.append({
-            "user_id": user.id, "loan_id": loan_id, "statement_id": stmt["id"], "line_no": n,
-            "txn_date": t.txn_date.isoformat(), "description": t.description, "kind": t.kind, "amount": t.amount,
-            "principal_amount": t.principal, "interest_amount": t.interest, "charges_amount": t.charges,
-            "balance_after": t.balance,
-        })
+        else:
+            fresh.append((n, t))
+    if not fresh:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Every transaction in this statement is already imported for this loan.")
+
+    stmt = client.table("loan_statements").insert({
+        "user_id": user.id, "loan_id": loan_id,
+        "statement_date": parsed.statement_date.isoformat(),
+        "period_start": parsed.period_start.isoformat(),
+        "period_end": parsed.period_end.isoformat(),
+        "opening_balance": parsed.opening_balance, "closing_balance": parsed.closing_balance,
+        "source": parsed.source,
+    }).execute().data[0]
+
+    rows = [{
+        "user_id": user.id, "loan_id": loan_id, "statement_id": stmt["id"], "line_no": n,
+        "txn_date": t.txn_date.isoformat(), "description": t.description, "kind": t.kind, "amount": t.amount,
+        "principal_amount": t.principal, "interest_amount": t.interest, "charges_amount": t.charges,
+        "balance_after": t.balance,
+    } for n, t in fresh]
     for i in range(0, len(rows), 500):
         client.table("loan_transactions").insert(rows[i:i + 500]).execute()
 
