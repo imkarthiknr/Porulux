@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import FileImporter from '@/components/dashboard/FileImporter'
+import Pagination, { usePagination } from '@/components/Pagination'
 import {
   deleteLoanStatement, getLoanAccount, importLoanStatement, updateItem,
   type Loan, type LoanAccount as Account, type LoanTxnKind,
@@ -20,13 +21,11 @@ const KINDS: Record<LoanTxnKind, { label: string; tone: string }> = {
   charge: { label: 'Charge', tone: 'bg-red-50 text-red-700' },
   other: { label: 'Other', tone: 'bg-slate-100 text-slate-600' },
 }
-const PAGE = 50
 
 export default function LoanAccount({ loan, onChange }: { loan: Loan; onChange: () => void }) {
   const [data, setData] = useState<Account | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<LoanTxnKind | 'all'>('all')
-  const [shown, setShown] = useState(PAGE)
   const [showStatements, setShowStatements] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -46,6 +45,7 @@ export default function LoanAccount({ loan, onChange }: { loan: Loan; onChange: 
 
   const s = data?.summary
   const txns = (data?.transactions ?? []).filter((t) => filter === 'all' || t.kind === filter)
+  const paging = usePagination(txns, { resetKey: filter })
   const kindsPresent = Array.from(new Set((data?.transactions ?? []).map((t) => t.kind)))
 
   return (
@@ -58,7 +58,7 @@ export default function LoanAccount({ loan, onChange }: { loan: Loan; onChange: 
         <FileImporter
           label="Import loan statement"
           accept=".pdf,.csv,image/*"
-          onDone={() => { setShown(PAGE); load() }}
+          onDone={() => { load() }}
           onImport={async (file, pw) => {
             const r = await importLoanStatement(loan.id, file, pw)
             return `Imported statement of ${fmtDate(r.statement.statement_date)}: ${r.transactions_inserted} transactions${r.duplicates_skipped ? ` (${r.duplicates_skipped} already existed)` : ''}.`
@@ -113,7 +113,7 @@ export default function LoanAccount({ loan, onChange }: { loan: Loan; onChange: 
             {(['all', ...kindsPresent] as const).map((k) => (
               <button
                 key={k}
-                onClick={() => { setFilter(k); setShown(PAGE) }}
+                onClick={() => setFilter(k)}
                 className={`px-3 py-1 rounded-full text-xs border transition-colors ${filter === k ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}
               >
                 {k === 'all' ? 'All' : KINDS[k].label}
@@ -131,7 +131,7 @@ export default function LoanAccount({ loan, onChange }: { loan: Loan; onChange: 
                 </tr>
               </thead>
               <tbody>
-                {txns.slice(0, shown).map((t) => (
+                {paging.items.map((t) => (
                   <tr key={t.id} className="border-t border-slate-100 text-slate-800">
                     <td className="py-1.5 px-3 whitespace-nowrap">{fmtDate(t.txn_date)}</td>
                     <td className="pr-3 max-w-xs truncate" title={t.description}>{t.description}</td>
@@ -145,9 +145,7 @@ export default function LoanAccount({ loan, onChange }: { loan: Loan; onChange: 
               </tbody>
             </table>
           </div>
-          {txns.length > shown && (
-            <button onClick={() => setShown(shown + PAGE)} className="text-sm text-indigo-600 hover:text-indigo-800">Show more ({txns.length - shown} left)</button>
-          )}
+          <Pagination state={paging} label="transactions" />
 
           <div>
             <button onClick={() => setShowStatements(!showStatements)} className="text-sm text-slate-500 hover:text-slate-800">

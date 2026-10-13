@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import DashboardNav from '@/components/dashboard/DashboardNav'
 import LoanAccount from '@/components/dashboard/LoanAccount'
+import Pagination, { usePagination } from '@/components/Pagination'
 import { getLoanTracker, listItems, updateItem, type Loan, type LoanTracker } from '@/lib/api'
 import { formatINR } from '@/lib/format'
 
@@ -60,6 +61,42 @@ function DetailsForm({ loan, onSaved, onCancel }: { loan: Loan; onSaved: () => v
         {onCancel && <button type="button" onClick={onCancel} className="rounded-lg border border-slate-300 text-sm px-4 py-2 text-slate-600">Cancel</button>}
       </div>
     </form>
+  )
+}
+
+type ScheduleRow = LoanTracker['schedule'][number]
+
+// 12 instalments (a year) per page, opening on the page that holds the next unpaid EMI.
+function ScheduleTable({ schedule }: { schedule: ScheduleRow[] }) {
+  const firstUnpaid = schedule.findIndex((r) => !r.paid)
+  const paging = usePagination(schedule, {
+    pageSize: 12, sizes: [12, 24, 60],
+    initialPage: firstUnpaid < 0 ? Math.ceil(schedule.length / 12) : Math.floor(firstUnpaid / 12) + 1,
+  })
+  return (
+    <div>
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="w-full text-xs">
+          <thead className="bg-slate-50">
+            <tr className="text-left text-slate-500">
+              <th className="py-2 px-3 font-medium">#</th><th className="font-medium">Due</th>
+              <th className="font-medium text-right">Interest</th><th className="font-medium text-right">Principal</th>
+              <th className="font-medium text-right">EMI</th><th className="font-medium text-right px-3">Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paging.items.map((r) => (
+              <tr key={r.number} className={`border-t border-slate-100 ${r.paid ? 'text-slate-400' : 'text-slate-800'}`}>
+                <td className="py-1.5 px-3">{r.number}</td><td>{r.due_date}</td>
+                <td className="text-right">{formatINR(r.interest)}</td><td className="text-right">{formatINR(r.principal)}</td>
+                <td className="text-right">{formatINR(r.emi)}</td><td className="text-right px-3">{formatINR(r.closing)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pagination state={paging} label="instalments" />
+    </div>
   )
 }
 
@@ -155,28 +192,7 @@ function Tracker({ loan, onChange }: { loan: Loan; onChange: () => void }) {
       </div>
       {editing && <DetailsForm loan={loan} onSaved={() => { setEditing(false); onChange() }} onCancel={() => setEditing(false)} />}
 
-      {showSchedule && (
-        <div className="max-h-96 overflow-auto rounded-lg border border-slate-200">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-slate-50">
-              <tr className="text-left text-slate-500">
-                <th className="py-2 px-3 font-medium">#</th><th className="font-medium">Due</th>
-                <th className="font-medium text-right">Interest</th><th className="font-medium text-right">Principal</th>
-                <th className="font-medium text-right">EMI</th><th className="font-medium text-right px-3">Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {t.schedule.map((r) => (
-                <tr key={r.number} className={`border-t border-slate-100 ${r.paid ? 'text-slate-400' : 'text-slate-800'}`}>
-                  <td className="py-1.5 px-3">{r.number}</td><td>{r.due_date}</td>
-                  <td className="text-right">{formatINR(r.interest)}</td><td className="text-right">{formatINR(r.principal)}</td>
-                  <td className="text-right">{formatINR(r.emi)}</td><td className="text-right px-3">{formatINR(r.closing)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {showSchedule && <ScheduleTable schedule={t.schedule} />}
     </div>
   )
 }

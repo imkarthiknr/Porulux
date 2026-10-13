@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import DashboardNav from '@/components/dashboard/DashboardNav'
 import AIKeyBanner from '@/components/dashboard/AIKeyBanner'
+import Pagination, { usePagination } from '@/components/Pagination'
 import RecurringPayments from '@/components/dashboard/RecurringPayments'
 import SpendTrendChart from '@/components/dashboard/SpendTrendChart'
 import {
@@ -39,6 +40,7 @@ export default function TransactionsPage() {
   const [saving, setSaving] = useState(false)
   const [password, setPassword] = useState('')
   const [needsPassword, setNeedsPassword] = useState(false)
+  const paging = usePagination(txns, { resetKey: `${month}|${category}|${accountId}` })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -332,7 +334,7 @@ export default function TransactionsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {txns.map((t) => (
+                  {paging.items.map((t) => (
                     <tr key={t.id} className="border-b border-slate-50">
                       <td className="py-2 pr-4 whitespace-nowrap text-slate-600">{t.transaction_date}</td>
                       <td className="py-2 pr-4 text-slate-800 max-w-xs">
@@ -359,6 +361,7 @@ export default function TransactionsPage() {
                   ))}
                 </tbody>
               </table>
+              <Pagination state={paging} label="transactions" />
             </div>
           )}
         </section>
