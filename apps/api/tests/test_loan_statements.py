@@ -185,3 +185,39 @@ def test_unusable_inputs(monkeypatch):
 def test_summary_balance_falls_back_to_statement_closing():
     s = summarize_account([], [{"statement_date": "2026-09-30", "closing_balance": 500000.0}])
     assert s["balance"] == 500000 and s["transaction_count"] == 0 and s["interest_paid"] == 0
+
+
+def test_yearly_statements_with_same_generation_date_both_import(monkeypatch):
+    """Lenders print the day the PDF was generated as the statement date, so PDFs downloaded together share it
+    even though they cover different years. That must not make the second one look like a duplicate."""
+    c, db = boot(monkeypatch, loans=[LOAN])
+    year = lambda y, bal: (  # noqa: E731
+        '{"statement_date":"2026-10-12","period_start":"%d-04-01","period_end":"%d-03-31","opening_balance":%d,'
+        '"transactions":[{"date":"%d-05-05","description":"EMI","kind":"emi","amount":20000,"balance":%d}]}' % (y, y + 1, bal + 10000, y, bal)
+    )
+    fake_ai(monkeypatch, year(2024, 990000))
+    first = upload(c)
+    fake_ai(monkeypatch, year(2025, 980000))
+    second = upload(c)
+    assert first.status_code == 201 and second.status_code == 201, second.text
+    assert sorted(s["statement_date"] for s in db.tables["loan_statements"]) == ["2025-03-31", "2026-03-31"]   # period end, not the print date
+    assert c.get(f"/api/v1/loans/{LOAN_ID}/account").json()["summary"]["balance"] == 980000    # latest period wins
+
+
+def test_reuploading_the_same_period_is_still_blocked(monkeypatch):
+    c, db = boot(monkeypatch, loans=[LOAN])
+    fake_ai(monkeypatch)
+    assert upload(c).status_code == 201
+    again = upload(c)
+    assert again.status_code == 409 and "already imported" in again.json()["detail"]
+    assert len(db.tables["loan_statements"]) == 1
+
+
+def test_statement_with_nothing_new_is_rejected_without_leaving_a_row(monkeypatch):
+    c, db = boot(monkeypatch, loans=[LOAN])
+    fake_ai(monkeypatch)
+    assert upload(c).status_code == 201
+    # Same transactions, but the model reported no period this time, so only the transactions can tell.
+    fake_ai(monkeypatch, '{"transactions":[{"date":"2026-09-05","description":"EMI 3","kind":"emi","amount":20000,"balance":919199}]}')
+    res = upload(c)
+    assert res.status_code == 409 and len(db.tables["loan_statements"]) == 1

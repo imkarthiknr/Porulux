@@ -12,12 +12,13 @@ KINDS = ("disbursement", "emi", "prepayment", "interest", "principal", "charge",
 LOAN_PROMPT = (
     "Extract this Indian loan account statement (home, personal, vehicle or other term loan). Return ONLY a JSON "
     "object (no markdown, no explanation):\n"
-    '{"statement_date":"YYYY-MM-DD","period_start":"YYYY-MM-DD or null","period_end":"YYYY-MM-DD or null",'
+    '{"period_start":"YYYY-MM-DD or null","period_end":"YYYY-MM-DD or null",'
     '"opening_balance":<outstanding principal at start or null>,"closing_balance":<outstanding principal at end or null>,'
     '"transactions":[{"date":"YYYY-MM-DD","description":"<narration>","kind":"disbursement|emi|prepayment|interest|principal|charge|other",'
     '"amount":<number>,"principal":<number or null>,"interest":<number or null>,"charges":<number or null>,'
     '"balance":<outstanding principal after this line, or null>}]}\n'
-    "All amounts are plain positive INR numbers. kind: disbursement = loan amount paid out; emi = an instalment paid; "
+    "period_start and period_end are the first and last day this statement covers, NOT the date it was generated "
+    "or downloaded. All amounts are plain positive INR numbers. kind: disbursement = loan amount paid out; emi = an instalment paid; "
     "prepayment = part-payment or foreclosure; interest or principal = a line that is only that component; charge = "
     "fees, penalties, GST, insurance. amount is the full value of the line. For an emi line, fill principal and "
     "interest when the statement splits them (principal + interest = amount, any fee goes in charges). If the "
@@ -122,22 +123,22 @@ def normalize_ai_result(raw: dict) -> ParsedLoanStatement:
         if kind not in KINDS:
             kind = classify(desc)
         txns.append(LoanTxn(d, desc, kind, amt, _pos(t.get("principal")), _pos(t.get("interest")), _pos(t.get("charges")), _pos(t.get("balance"))))
-    stmt_date = (
-        parse_date(str(raw.get("statement_date") or ""))
-        or parse_date(str(raw.get("period_end") or ""))
-        or (max(t.txn_date for t in txns) if txns else None)
-    )
-    if stmt_date is None or not txns:
-        raise ValueError("no transactions or statement date found")
+    if not txns:
+        raise ValueError("no transactions found")
+    # The "statement date" printed on a PDF is usually the day it was generated, so PDFs downloaded together
+    # all share it. Identify the statement by the period it covers instead.
+    period_start = parse_date(str(raw.get("period_start") or "")) or min(t.txn_date for t in txns)
+    period_end = parse_date(str(raw.get("period_end") or "")) or max(t.txn_date for t in txns)
+    period_start, period_end = min(period_start, min(t.txn_date for t in txns)), max(period_end, max(t.txn_date for t in txns))
     opening = _num(raw.get("opening_balance"))
     fill_components(txns, opening)
     closing = _num(raw.get("closing_balance"))
     if closing is None:
         closing = next((t.balance for t in reversed(txns) if t.balance is not None), None)
     return ParsedLoanStatement(
-        statement_date=stmt_date,
-        period_start=parse_date(str(raw.get("period_start") or "")),
-        period_end=parse_date(str(raw.get("period_end") or "")),
+        statement_date=period_end,
+        period_start=period_start,
+        period_end=period_end,
         opening_balance=opening,
         closing_balance=closing,
         transactions=txns,
